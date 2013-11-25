@@ -28,7 +28,6 @@ public class CliqueMain {
 		int reducenum=Integer.valueOf(args[2]);
 
 		
-		
 		Job job = new Job(conf,"detect clique");		
 		
 		job.setJarByClass(CliqueMain.class);
