@@ -1,0 +1,14 @@
+#Fat Jar Configuration File
+#Mon Mar 25 20:49:09 CST 2013
+onejar.license.required=true
+manifest.classpath=
+manifest.removesigners=true
+onejar.checkbox=false
+jarname=MaxCliqueGeneralV1_Step1_Random.jar
+manifest.mergeall=true
+manifest.mainclass=cliquenew.CliqueMain
+manifest.file=<createnew>
+jarname.isextern=false
+onejar.expand=
+excludes=<jar|hadoopdb.jar>;<jar|hsqldb-1.8.0.10.jar>;<jar|hadoop-eclipse-plugin-0.20.203.0.jar>
+includes=

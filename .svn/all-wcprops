@@ -1,0 +1,29 @@
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/!svn/ver/2/trunk/MaxCliqueGeneralV1
+END
+.fatjar
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/.fatjar
+END
+SecurityAuth.audit
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/SecurityAuth.audit
+END
+.project
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/.project
+END
+.classpath
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/.classpath
+END

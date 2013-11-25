@@ -1,0 +1,29 @@
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/src/bottleneck
+END
+BottleneckTimeAllReducer.java
+K 25
+svn:wc:ra_dav:version-url
+V 85
+/svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/src/bottleneck/BottleneckTimeAllReducer.java
+END
+PairTypeInt.java
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/src/bottleneck/PairTypeInt.java
+END
+BottleneckMapper.java
+K 25
+svn:wc:ra_dav:version-url
+V 77
+/svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/src/bottleneck/BottleneckMapper.java
+END
+BottleneckPartitioner.java
+K 25
+svn:wc:ra_dav:version-url
+V 82
+/svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/src/bottleneck/BottleneckPartitioner.java
+END

@@ -1,0 +1,44 @@
+10
+
+dir
+3
+https://my-mce-hadoop.googlecode.com/svn/trunk/MaxCliqueGeneralV1/src
+https://my-mce-hadoop.googlecode.com/svn
+
+
+
+2013-11-25T08:16:45.312201Z
+3
+youli9056@gmail.com
+
+
+svn:special svn:externals svn:needs-lock
+
+
+
+
+
+
+
+
+
+
+
+17fb2b5d-dd25-aacf-5c3d-fd8fad4d2ae6
+
+
+
+
+
+
+0
+
+bottleneck
+dir
+
+cliquenew
+dir
+
+detect
+dir
+
