@@ -168,15 +168,15 @@ public class DetectTimeAll {
 			raf = new RandomAccessFile(curReduce, "rw");
 		}
 
-		
-
 		@Override
 		protected void cleanup(Context context) throws IOException,
 				InterruptedException {
-			Stack<Status> stack = new Stack<Status>();
+			
 			// reduce运行结束，时间T还没有到，接着读取/home/dic/over/中的文件处理
 			if (raf.getFilePointer() != 0 && tPhase < TimeThreshold) {// 文件中有内容
+				Stack<Status> stack = new Stack<Status>();
 				verEdge.clear();
+				
 				stack.clear();
 				result = null;
 				raf.seek(0);
@@ -184,10 +184,8 @@ public class DetectTimeAll {
 				RandomAccessFile rnew = new RandomAccessFile(new File(dirRoot,
 						which + "#"), "rw");
 				String line = "";
-				String lastline = "";
 				long t1 = System.currentTimeMillis();
 				long t2 = System.currentTimeMillis();
-				boolean gotenough = false;
 				while ((line = raf.readLine()) != null) {
 					// 是子图或者边邻接信息
 					String[] ab = line.split("\t");
@@ -213,6 +211,7 @@ public class DetectTimeAll {
 						}
 					}
 					// 一个完整的子图已经都读进来了，计算这个子图
+					parts.clear();
 					while (!stack.empty()) {
 						Status top = stack.pop();
 						HashSet<Integer> notset = top.getNotset();
@@ -221,7 +220,12 @@ public class DetectTimeAll {
 						TreeMap<Integer, HashSet<Integer>> od2c;
 						int level = top.getLevel();
 						int vp = top.getVp();
-						result = top.getResult();
+						if(top.getResult()!=null){
+							result = top.getResult();
+						}
+						if(level+cand.size()<=MaxOne){
+							continue;
+						}
 						if (allContained(cand, notset)) {
 							continue;
 						}
@@ -242,7 +246,7 @@ public class DetectTimeAll {
 							continue;
 						} else {
 							int aim = 0, mindeg = Integer.MAX_VALUE;
-							while (cand.size() + level > 4 && cand.size() > 0) {
+							while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
 								Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
 										.firstEntry();
 								aim = firstEntry.getValue().iterator().next();//
@@ -266,6 +270,9 @@ public class DetectTimeAll {
 										aim = lastEntry.getValue().iterator()
 												.next();
 										notset.retainAll(verEdge.get(aim));
+									}
+									if(level+cand.size()<=MaxOne){
+										break;
 									}
 									if (allContained(cand, notset)) {
 										break;
@@ -346,6 +353,7 @@ public class DetectTimeAll {
 			if (thenode.contains(tmpKey)) {// tmpKey == thenode单节点时如此
 				vertex.clear();
 				verEdge.clear();
+				parts.clear();
 				count = 0;
 				notset.clear();
 				cand.clear();
@@ -415,7 +423,7 @@ public class DetectTimeAll {
 						keyset.add(et.getKey());
 					}
 				}
-				if (tcand.size() < 3)
+				if (tcand.size() < MaxOne)
 					return;
 				long t1 = System.currentTimeMillis();
 				long t2 = System.currentTimeMillis();
@@ -448,7 +456,7 @@ public class DetectTimeAll {
 						return;
 					} else {
 						int aim = 0, mindeg = Integer.MAX_VALUE;
-						while (cand.size() + level > 4 && cand.size() > 0) {
+						while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
 							Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
 									.firstEntry();
 							aim = firstEntry.getValue().iterator().next();//
@@ -472,6 +480,9 @@ public class DetectTimeAll {
 									aim = lastEntry.getValue().iterator()
 											.next();
 									notset.retainAll(verEdge.get(aim));
+								}
+								if(level+cand.size()<=MaxOne){
+									break;
 								}
 								if (allContained(cand, notset)) {
 									break;
@@ -509,8 +520,7 @@ public class DetectTimeAll {
 			}// if该节点需要计算
 		}// reduce
 
-		private void computeSmallGraph(Status ss,
-				org.apache.hadoop.mapreduce.Reducer.Context context)
+		private void computeSmallGraph(Status ss, Context context)
 				throws IOException, InterruptedException {
 			// TODO Auto-generated method stub
 			Stack<Status> smallStack = new Stack<Status>();
@@ -520,6 +530,9 @@ public class DetectTimeAll {
 				HashSet<Integer> notset = s.getNotset();
 				HashMap<Integer, Integer> cand = s.getCandidate();
 				int vp = s.getVp(), level = s.getLevel();
+				if(level+cand.size()<=MaxOne){
+					continue;
+				}
 				if (allContained(cand, notset)) {
 					continue;
 				}
@@ -543,12 +556,11 @@ public class DetectTimeAll {
 				ArrayList<Integer> noneFixp = new ArrayList<Integer>(
 						cand.size() - maxdeg);
 				HashMap<Integer, Integer> tmpcand = genInterSet(cand, fixp,
-						maxdeg, noneFixp);// �����Ѿ���fixp��cand����ɾ����
+						maxdeg, noneFixp);//
 				HashSet<Integer> tmpnot = genInterSet(notset, fixp);
 				Status tmp = new Status(fixp, level + 1, tmpcand, tmpnot, null,
 						null);
 				smallStack.add(tmp);
-				// cand.remove(fixp);
 				notset.add(fixp);
 				for (int fix : noneFixp) {
 					HashMap<Integer, Integer> tcand = genInterSet(cand, fix);// �����Ѿ���fixp��cand����ɾ����
@@ -692,8 +704,7 @@ public class DetectTimeAll {
 		}
 
 		private void emitClique(ArrayList<Integer> result2, int level,
-				HashMap<Integer, Integer> cand,
-				org.apache.hadoop.mapreduce.Reducer.Context context)
+				HashMap<Integer, Integer> cand, Context context)
 				throws IOException, InterruptedException {
 			StringBuilder sb = new StringBuilder();
 			

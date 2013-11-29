@@ -39,7 +39,7 @@ public class CliqueMain {
 		job.setOutputValueClass(Text.class);
 		job.setNumReduceTasks(reducenum);
 		FileInputFormat.addInputPath(job, new Path(in));
-		FileOutputFormat.setOutputPath(job, new Path(pre+"_result"));
+		FileOutputFormat.setOutputPath(job, new Path(pre+"_result_Binary"));
 		
 		long t1 = System.currentTimeMillis();
 		job.waitForCompletion(true);

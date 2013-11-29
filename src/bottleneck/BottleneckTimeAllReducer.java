@@ -167,7 +167,6 @@ public class BottleneckTimeAllReducer {
 			if (raf.getFilePointer() != 0 && tPhase < TimeThreshold) {// 文件中有内容
 				verEdge.clear();
 				stack.clear();
-				parts.clear();
 				result = null;
 				raf.seek(0);
 				// 重新写入这个文件，原来的文件作废，最后将其删除！
@@ -204,6 +203,7 @@ public class BottleneckTimeAllReducer {
 					}
 
 					// 一个完整的子图已经都读进来了，计算这个子图
+					parts.clear();
 					while (!stack.empty()) {
 						Status top = stack.pop();
 						HashSet<Integer> notset = top.getNotset();
@@ -212,7 +212,12 @@ public class BottleneckTimeAllReducer {
 						TreeMap<Integer, HashSet<Integer>> od2c;
 						int level = top.getLevel();
 						int vp = top.getVp();
-						result = top.getResult();
+						if(top.getResult()!=null){
+							result = top.getResult();
+						}
+						if(level+cand.size()<=MaxOne){
+							continue;
+						}
 						if (allContained(cand, notset)) {
 							continue;
 						}
@@ -233,7 +238,7 @@ public class BottleneckTimeAllReducer {
 							continue;
 						} else {
 							int aim = 0, mindeg = Integer.MAX_VALUE;
-							while (cand.size() + level > 4 && cand.size() > 0) {
+							while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
 								Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
 										.firstEntry();
 								aim = firstEntry.getValue().iterator().next();//
@@ -257,6 +262,9 @@ public class BottleneckTimeAllReducer {
 										aim = lastEntry.getValue().iterator()
 												.next();
 										notset.retainAll(verEdge.get(aim));
+									}
+									if(level+cand.size()<=MaxOne){
+										break;
 									}
 									if (allContained(cand, notset)) {
 										break;
@@ -397,10 +405,9 @@ public class BottleneckTimeAllReducer {
 			long t1 = System.currentTimeMillis();
 			long t2 = System.currentTimeMillis();
 			while (!stack.empty()) {
-				Status top = stack.pop();
 				if (tPhase < TimeThreshold) // 时间小于阈值
 				{
-
+					Status top = stack.pop();
 					HashSet<Integer> notset = top.getNotset();
 					HashMap<Integer, Integer> cand = top.getCandidate();
 					result = top.getResult();
@@ -408,6 +415,9 @@ public class BottleneckTimeAllReducer {
 					TreeMap<Integer, HashSet<Integer>> od2c;
 					int level = top.getLevel();
 					int vp = top.getVp();
+					if(level+cand.size()<=MaxOne){
+						continue;
+					}
 					if (allContained(cand, notset)) {
 						return;
 					}
@@ -428,7 +438,7 @@ public class BottleneckTimeAllReducer {
 						return;
 					} else {
 						int aim = 0, mindeg = Integer.MAX_VALUE;
-						while (cand.size() + level > 4 && cand.size() > 0) {
+						while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
 							Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
 									.firstEntry();
 							aim = firstEntry.getValue().iterator().next();//
@@ -452,6 +462,9 @@ public class BottleneckTimeAllReducer {
 									aim = lastEntry.getValue().iterator()
 											.next();
 									notset.retainAll(verEdge.get(aim));
+								}
+								if(level+cand.size()<=MaxOne){
+									break;
 								}
 								if (allContained(cand, notset)) {
 									break;
@@ -487,8 +500,7 @@ public class BottleneckTimeAllReducer {
 
 		}// reduce
 
-		private void computeSmallGraph(Status ss,
-				org.apache.hadoop.mapreduce.Reducer.Context context)
+		private void computeSmallGraph(Status ss, Context context)
 				throws IOException, InterruptedException {
 			// TODO Auto-generated method stub
 			Stack<Status> smallStack = new Stack<Status>();
@@ -498,6 +510,9 @@ public class BottleneckTimeAllReducer {
 				HashSet<Integer> notset = s.getNotset();
 				HashMap<Integer, Integer> cand = s.getCandidate();
 				int vp = s.getVp(), level = s.getLevel();
+				if(level+cand.size()<=MaxOne){
+					continue;
+				}
 				if (allContained(cand, notset)) {
 					continue;
 				}
@@ -670,8 +685,7 @@ public class BottleneckTimeAllReducer {
 		}
 
 		private void emitClique(ArrayList<Integer> result2, int level,
-				HashMap<Integer, Integer> cand,
-				org.apache.hadoop.mapreduce.Reducer.Context context)
+				HashMap<Integer, Integer> cand, Context context)
 				throws IOException, InterruptedException {
 			StringBuilder sb = new StringBuilder();
 			numClique++;

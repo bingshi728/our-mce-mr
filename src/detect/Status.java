@@ -17,9 +17,6 @@ public class Status {
 	TreeMap<Integer, HashSet<Integer>> od2c;
 
 	public Status(String s) {
-		this.candidate = new HashMap<Integer, Integer>();
-		this.notset = new HashSet<Integer>();
-		this.result = new ArrayList<Integer>();
 		this.read(s);
 	}
 
@@ -134,10 +131,10 @@ public class Status {
 		for (int i = 1; i < enls.length; i++) {
 			this.notset.add(Integer.parseInt(enls[1].trim()));
 		}
+		this.result = new ArrayList<Integer>(this.level+this.candidate.size()/2);
 		if(level>1){
 			enls = elms[4].split(",");
 			//int resultsize = Integer.parseInt(enls[0]);
-			this.result = new ArrayList<Integer>(this.level+this.candidate.size()/2);
 			for(int i = 0;i<this.level-1;i++){
 				this.result.add(Integer.parseInt(enls[i]));
 			}
