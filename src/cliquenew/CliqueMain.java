@@ -19,13 +19,14 @@ public class CliqueMain {
 
 		Configuration conf = new Configuration();
 		String[] otherArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
-	    if (otherArgs.length != 3) {
+	    if (otherArgs.length < 3) {
 	      System.err.println("Usage: CliqueMain <in> <out> <reducenum>");
 	      System.exit(2);
 	    }
-		String in=args[0];
-		String pre=args[1];
-		int reducenum=Integer.valueOf(args[2]);
+	  //String in=args[0];
+	    int arglen = args.length;
+		String pre=args[arglen -2];
+		int reducenum=Integer.valueOf(args[arglen-1]);
 
 		
 		Job job = new Job(conf,"detect clique");		
@@ -38,7 +39,8 @@ public class CliqueMain {
 		job.setOutputKeyClass(IntWritable.class);
 		job.setOutputValueClass(Text.class);
 		job.setNumReduceTasks(reducenum);
-		FileInputFormat.addInputPath(job, new Path(in));
+		for(int i = 0; i < arglen -2;i++)
+			FileInputFormat.addInputPath(job, new Path(args[i]));
 		FileOutputFormat.setOutputPath(job, new Path(pre+"_result_Binary"));
 		
 		long t1 = System.currentTimeMillis();

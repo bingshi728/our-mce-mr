@@ -129,7 +129,7 @@ public class Status {
 		int notsize = Integer.parseInt(enls[0]);
 		this.notset = new HashSet<Integer>(notsize);
 		for (int i = 1; i < enls.length; i++) {
-			this.notset.add(Integer.parseInt(enls[1].trim()));
+			this.notset.add(Integer.parseInt(enls[i].trim()));
 		}
 		this.result = new ArrayList<Integer>(this.level+this.candidate.size()/2);
 		if(level>1){

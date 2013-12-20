@@ -12,13 +12,6 @@ import org.apache.hadoop.mapreduce.Mapper.Context;
 
 public class BottleneckMapper extends
 		Mapper<LongWritable, Text, PairTypeInt, Text> {
-
-	@Override
-	protected void setup(Context context) throws IOException,
-			InterruptedException {
-		super.setup(context);
-	}
-
 	@Override
 	protected void map(LongWritable key, Text value, Context context)
 			throws IOException, InterruptedException {

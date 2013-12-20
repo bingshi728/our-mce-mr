@@ -56,7 +56,7 @@ public class BottleneckTimeAllReducer {
 	public static HashSet<Integer> hs = new HashSet<Integer>();
 	public static boolean balanceOrNot = false;
 	public static long tPhase = 0;
-	public static File dirRoot = new File("/home/youli/CliqueHadoop/");
+	public static File dirRoot = new File("/home/dic/CliqueHadoop/");
 	public static File serial = new File(dirRoot, "serialNumber.txt");
 	public static RandomAccessFile raf = null;
 	public static int which = 0;// 区分reduce的唯一编号，用于写数据文件
@@ -152,7 +152,7 @@ public class BottleneckTimeAllReducer {
 					rafcur.close();
 			}
 			// 获得唯一编号后打开文件
-			File curReduce = new File(dirRoot, which + "");
+			File curReduce = new File(dirRoot, "/outresult/binary/"+which);
 			raf = new RandomAccessFile(curReduce, "rw");
 			//raf.write("setup ok".getBytes());
 		}
@@ -162,16 +162,24 @@ public class BottleneckTimeAllReducer {
 		@Override
 		protected void cleanup(Context context) throws IOException,
 				InterruptedException {
-			Stack<Status> stack = new Stack<Status>();
+			
 			// reduce运行结束，时间T还没有到，接着读取/home/dic/over/中的文件处理
-			if (raf.getFilePointer() != 0 && tPhase < TimeThreshold) {// 文件中有内容
+			if (raf.getFilePointer() == 0) {
+				raf.close();
+				File f = new File(dirRoot, "/outresult/binary/" + which + "");
+				boolean RES = f.delete();
+				System.out.println("this reducer is number:" + which + " "
+						+ "and raf is empty so delete file:" + f.getPath()
+						+ " --" + RES);
+			} else if (raf.getFilePointer() != 0 && tPhase < TimeThreshold) {// 文件中有内容
+				Stack<Status> stack = new Stack<Status>();
 				verEdge.clear();
 				stack.clear();
 				result = null;
 				raf.seek(0);
 				// 重新写入这个文件，原来的文件作废，最后将其删除！
 				RandomAccessFile rnew = new RandomAccessFile(new File(dirRoot,
-						which + "#"), "rw");
+						"/outresult/binary/"+which + "#"), "rw");
 				String line = "";
 				String lastline = "";
 				long t1 = System.currentTimeMillis();
@@ -250,7 +258,7 @@ public class BottleneckTimeAllReducer {
 								Status ss = new Status(aim, level + 1, aimSet,
 										aimnotset, null, null);
 								if (aimSet.size() <= sizeN)
-									computeSmallGraph(ss, context);
+									computeSmallGraph(ss, context,1);
 								else {
 									stack.add(ss);
 								}
@@ -273,14 +281,54 @@ public class BottleneckTimeAllReducer {
 										break;
 									}
 								}
+								t2 = System.currentTimeMillis();
+								tPhase += (t2 - t1);
+								t1 = t2;
+								if (tPhase > TimeThreshold) {
+									break;
+								}
+							}
+							if(tPhase > TimeThreshold){
+								while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
+									Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
+											.firstEntry();
+									aim = firstEntry.getValue().iterator().next();//
+									mindeg = firstEntry.getKey();
+									HashMap<Integer, Integer> aimSet = updateMarkDeg(
+											aim, mindeg, cand, d2c, od2c);
+									HashSet<Integer> aimnotset = genInterSet(
+											notset, aim);
+									Status ss = new Status(aim, level + 1, aimSet,
+											aimnotset, null, null);
+									if (aimSet.size() <= sizeN)
+										computeSmallGraph(ss, context,1);
+									else {
+										stack.add(ss);
+									}
+									notset.add(aim);
+									if (judgeClique(d2c)) {
+										if (cand.size() > 0) {
+											Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
+													.lastEntry();
+											aim = lastEntry.getValue().iterator()
+													.next();
+											notset.retainAll(verEdge.get(aim));
+										}
+										if(level+cand.size()<=MaxOne){
+											break;
+										}
+										if (allContained(cand, notset)) {
+											break;
+										} else {
+											emitClique(result, level, cand, context);
+											break;
+										}
+									}
+								}
+								break;
 							}
 						}
-						t2 = System.currentTimeMillis();
-						tPhase += (t2 - t1);
-						t1 = t2;
-						if (tPhase > TimeThreshold) {
-							break;
-						}
+						
 					}
 					boolean needtospillveredge = !stack.empty();
 					while (!stack.empty()) {
@@ -304,9 +352,31 @@ public class BottleneckTimeAllReducer {
 					rnew.write(line.getBytes());
 					rnew.write("\n".getBytes());
 				}
-				rnew.close();
+				File endf = new File(dirRoot, "/outresult/binary/" + which + "");
+				boolean endRES = endf.delete();
+				System.out.println("this reducer is number:" + which + " "
+						+ "and clean up to end, so delete file:"
+						+ endf.getPath() + " --" + endRES);
+				if (rnew.getFilePointer() == 0) {
+					File tf = new File(dirRoot, "/outresult/binary/" + which
+							+ "#");
+					boolean ntr = tf.delete();
+					System.out
+							.println("this reducer is number:"
+									+ which
+									+ " "
+									+ "and clean up to end & rnew is empty, so delete file:"
+									+ tf.getPath() + " --" + ntr);
+				} else {
+					rnew.close();
+				}
+			}else{
+				System.out.println("this reducer is number:"
+									+ which
+									+ " "
+									+ "and clean up is time out,raf!=0, close raf and exit");
+				raf.close();
 			}
-			raf.close();
 			super.cleanup(context);
 		}
 
@@ -377,7 +447,6 @@ public class BottleneckTimeAllReducer {
 				// 边邻接信息写在最后
 				String edgestr = "";
 				for (Text t : values) {
-					System.out.println("out"+t.toString());
 					NodeSN++;
 					String ver = t.toString();
 					if (type == 1) {
@@ -405,8 +474,7 @@ public class BottleneckTimeAllReducer {
 			long t1 = System.currentTimeMillis();
 			long t2 = System.currentTimeMillis();
 			while (!stack.empty()) {
-				if (tPhase < TimeThreshold) // 时间小于阈值
-				{
+				
 					Status top = stack.pop();
 					HashSet<Integer> notset = top.getNotset();
 					HashMap<Integer, Integer> cand = top.getCandidate();
@@ -450,7 +518,7 @@ public class BottleneckTimeAllReducer {
 							Status ss = new Status(aim, level + 1, aimSet,
 									aimnotset, null, null);
 							if (aimSet.size() <= sizeN)
-								computeSmallGraph(ss, context);
+								computeSmallGraph(ss, context,1);
 							else {
 								spillToDisk(ss, raf);
 							}
@@ -473,15 +541,57 @@ public class BottleneckTimeAllReducer {
 									break;
 								}
 							}
+							
+							t2 = System.currentTimeMillis();
+							tPhase += (t2 - t1);
+							t1 = t2;// 重新设定累计起点
+							if (tPhase > TimeThreshold) {
+								System.out.println("in clean up INNER time is out:"
+										+ (tPhase > TimeThreshold) + "\tt is "
+										+ tPhase + "\tpahse is " + TimeThreshold);
+								break;
+							}
 						}
-					}
-					t2 = System.currentTimeMillis();
-					tPhase += (t2 - t1);
-					t1 = t2;// 重新设定累计起点
-				} else// 时间超阈值，状态直接发往下一个phase
-				{
-					break;
-				}// 计算末尾
+						if(tPhase > TimeThreshold){
+							while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
+								Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
+										.firstEntry();
+								aim = firstEntry.getValue().iterator().next();//
+								mindeg = firstEntry.getKey();
+								HashMap<Integer, Integer> aimSet = updateMarkDeg(
+										aim, mindeg, cand, d2c, od2c);
+								HashSet<Integer> aimnotset = genInterSet(notset,
+										aim);
+								Status ss = new Status(aim, level + 1, aimSet,
+										aimnotset, null, null);
+								
+								spillToDisk(ss, raf);
+								
+								notset.add(aim);
+								if (judgeClique(d2c)) {
+									if (cand.size() > 0) {
+										Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
+												.lastEntry();
+										aim = lastEntry.getValue().iterator()
+												.next();
+										notset.retainAll(verEdge.get(aim));
+									}
+									if(level+cand.size()<=MaxOne){
+										break;
+									}
+									if (allContained(cand, notset)) {
+										break;
+									} else {
+										emitClique(result, level, cand, context);
+										break;
+									}
+								}
+							}
+							break;
+						}
+					}//不是clique
+					
+				
 			}
 			while (!stack.empty()) {// 未算完的spill到磁盘
 				spillToDisk(stack.pop(), raf);
@@ -500,58 +610,126 @@ public class BottleneckTimeAllReducer {
 
 		}// reduce
 
-		private void computeSmallGraph(Status ss, Context context)
+		private void computeSmallGraph(Status sst, Context context,int type)
 				throws IOException, InterruptedException {
 			// TODO Auto-generated method stub
 			Stack<Status> smallStack = new Stack<Status>();
-			smallStack.add(ss);
-			while (!smallStack.empty()) {
-				Status s = smallStack.pop();
-				HashSet<Integer> notset = s.getNotset();
-				HashMap<Integer, Integer> cand = s.getCandidate();
-				int vp = s.getVp(), level = s.getLevel();
-				if(level+cand.size()<=MaxOne){
-					continue;
-				}
-				if (allContained(cand, notset)) {
-					continue;
-				}
-				if (result.size() + 1 == level) {
-					result.add(vp);
-				} else {
-					result.set(level - 1, vp);
-				}
-				if (cand.isEmpty()) {
-					if (notset.isEmpty()) {
-						emitClique(result, level, cand, context);
+			smallStack.add(sst);
+			switch(type){
+			case 0://小的子图用bkpb的方法算
+				while (!smallStack.empty()) {
+					Status s = smallStack.pop();
+					HashSet<Integer> notset = s.getNotset();
+					HashMap<Integer, Integer> cand = s.getCandidate();
+					int vp = s.getVp(), level = s.getLevel();
+					if(level+cand.size()<=MaxOne){
+						continue;
 					}
-					continue;
-				}
-				int fixp = findMaxDegreePoint(cand);
-				// int maxdeg = cand.get(fixp);
-				if (isClique) {
-					emitClique(result, level, cand, context);
-					continue;
-				}
-				ArrayList<Integer> noneFixp = new ArrayList<Integer>(
-						cand.size() - maxdeg);
-				HashMap<Integer, Integer> tmpcand = genInterSet(cand, fixp,
-						maxdeg, noneFixp);// �����Ѿ���fixp��cand����ɾ����
-				HashSet<Integer> tmpnot = genInterSet(notset, fixp);
-				Status tmp = new Status(fixp, level + 1, tmpcand, tmpnot, null,
-						null);
-				smallStack.add(tmp);
-				// cand.remove(fixp);
-				notset.add(fixp);
-				for (int fix : noneFixp) {
-					HashMap<Integer, Integer> tcand = genInterSet(cand, fix);// �����Ѿ���fixp��cand����ɾ����
-					HashSet<Integer> tnot = genInterSet(notset, fix);
-					Status temp = new Status(fix, level + 1, tcand, tnot, null,
+					if (allContained(cand, notset)) {
+						continue;
+					}
+					if (result.size() + 1 == level) {
+						result.add(vp);
+					} else {
+						result.set(level - 1, vp);
+					}
+					if (cand.isEmpty()) {
+						if (notset.isEmpty()) {
+							emitClique(result, level, cand, context);
+						}
+						continue;
+					}
+					int fixp = findMaxDegreePoint(cand);
+					// int maxdeg = cand.get(fixp);
+					if (isClique) {
+						emitClique(result, level, cand, context);
+						continue;
+					}
+					ArrayList<Integer> noneFixp = new ArrayList<Integer>(
+							cand.size() - maxdeg);
+					HashMap<Integer, Integer> tmpcand = genInterSet(cand, fixp,
+							maxdeg, noneFixp);//
+					HashSet<Integer> tmpnot = genInterSet(notset, fixp);
+					Status tmp = new Status(fixp, level + 1, tmpcand, tmpnot, null,
 							null);
-					smallStack.add(temp);
-					notset.add(fix);
+					smallStack.add(tmp);
+					notset.add(fixp);
+					for (int fix : noneFixp) {
+						HashMap<Integer, Integer> tcand = genInterSet(cand, fix);// �����Ѿ���fixp��cand����ɾ����
+						HashSet<Integer> tnot = genInterSet(notset, fix);
+						Status temp = new Status(fix, level + 1, tcand, tnot, null,
+								null);
+						smallStack.add(temp);
+						notset.add(fix);
+					}
 				}
+				break;
+			case 1://小的子图用binary的方法算
+				while (!smallStack.empty()) {
+					Status top = smallStack.pop();
+					HashSet<Integer> notset = top.getNotset();
+					HashMap<Integer, Integer> cand = top.getCandidate();
+					HashMap<Integer, HashSet<Integer>> d2c;
+					TreeMap<Integer, HashSet<Integer>> od2c;
+					int level = top.getLevel();
+					int vp = top.getVp();
+					if (level+cand.size()<=MaxOne||allContained(cand, notset)) {
+						continue;
+					}
+					if (result.size() + 1 == level) {
+						result.add(vp);
+					} else {
+						result.set(level - 1, vp);
+					}
+					d2c = top.getDeg2cand();
+					od2c = top.getOd2c();
+					if (d2c == null) {
+						d2c = new HashMap<Integer, HashSet<Integer>>();
+						od2c = new TreeMap<Integer, HashSet<Integer>>();
+						updateDeg(cand, d2c, od2c);
+					}
+					if (judgeClique(d2c)) {
+						emitClique(result, level, cand, context);
+						continue;
+					} else {
+						int aim = 0, mindeg = Integer.MAX_VALUE;
+						while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
+							Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
+									.firstEntry();
+							aim = firstEntry.getValue().iterator().next();//
+							mindeg = firstEntry.getKey();
+							HashMap<Integer, Integer> aimSet = updateMarkDeg(
+									aim, mindeg, cand, d2c, od2c);
+							HashSet<Integer> aimnotset = genInterSet(notset,
+									aim);
+							Status ss = new Status(aim, level + 1, aimSet,
+									aimnotset, null, null);
+							smallStack.add(ss);
+							notset.add(aim);
+							if (judgeClique(d2c)) {
+								if (cand.size() > 0) {
+									Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
+											.lastEntry();
+									aim = lastEntry.getValue().iterator()
+											.next();
+									notset.retainAll(verEdge.get(aim));
+								}
+								if(level+cand.size()<=MaxOne){
+									break;
+								}
+								if (allContained(cand, notset)) {
+									break;
+								} else {
+									emitClique(result, level, cand, context);
+									break;
+								}
+							}
+						}
+					}
+				}
+				break;
 			}
+			
 		}
 
 		private int findMaxDegreePoint(HashMap<Integer, Integer> cand) {
@@ -718,7 +896,6 @@ public class BottleneckTimeAllReducer {
 				HashMap<Integer, HashSet<Integer>> d2c,
 				TreeMap<Integer, HashSet<Integer>> od2c) {
 			// TODO Auto-generated method stub
-			System.out.println("veredge:"+verEdge);
 			int deg = 0;
 			HashSet<Integer> adj;
 			for (Map.Entry<Integer, Integer> en : cand.entrySet()) {
@@ -827,6 +1004,8 @@ public class BottleneckTimeAllReducer {
 				HashSet<Integer> notset) {
 			for (int nt : notset) {
 				HashSet<Integer> nadj = verEdge.get(nt);
+				if(nadj==null)System.out.println(tmpKey+"~~~~~~~~"+nt+"~~~~~~nadj null"+verEdge);
+				if(cand==null)System.out.println("cand null");
 				if (nadj.containsAll(cand.keySet()))
 					return true;
 			}
