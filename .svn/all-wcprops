@@ -15,11 +15,23 @@ svn:wc:ra_dav:version-url
 V 59
 /svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/SecurityAuth.audit
 END
+.gitignore
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/!svn/ver/4/trunk/MaxCliqueGeneralV1/.gitignore
+END
 .project
 K 25
 svn:wc:ra_dav:version-url
 V 49
 /svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/.project
+END
+README
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/!svn/ver/4/trunk/MaxCliqueGeneralV1/README
 END
 .classpath
 K 25

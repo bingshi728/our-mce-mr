@@ -3,3 +3,9 @@ svn:wc:ra_dav:version-url
 V 44
 /svn/!svn/ver/3/trunk/MaxCliqueGeneralV1/src
 END
+SumFileSize.java
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/svn/!svn/ver/6/trunk/MaxCliqueGeneralV1/src/SumFileSize.java
+END
