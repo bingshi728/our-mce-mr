@@ -275,7 +275,7 @@ public class DetectTimeAll {
 										notset, aim);
 								Status ss = new Status(aim, level + 1, aimSet,
 										aimnotset, null, null);
-								if (aimSet.size() <= sizeN)
+								if (aimSet.size() <= sizeN && tPhase <= TimeThreshold)
 									computeSmallGraph(ss, context, 1);
 								else {
 									stack.add(ss);
@@ -299,17 +299,13 @@ public class DetectTimeAll {
 										break;
 									}
 								}
-								t2 = System.currentTimeMillis();
-								tPhase += (t2 - t1);
-								t1 = t2;
-								if (tPhase > TimeThreshold) {
-									System.out.println("in clean up INNER time is out:"
-											+ (tPhase > TimeThreshold) + "\tt is "
-											+ tPhase + "\tpahse is " + TimeThreshold);
-									break;
+								if (tPhase <= TimeThreshold) {
+									t2 = System.currentTimeMillis();
+									tPhase += (t2 - t1);
+									t1 = t2;
 								}
 							}
-							
+							/**
 							if(tPhase > TimeThreshold){
 								System.out.println("time is out, just cut the current subgraph");
 								//即使超过时间阀值,还是要将当前子图切掉
@@ -350,7 +346,7 @@ public class DetectTimeAll {
 								}
 								//当前subGraph已经切完,不再切stack中的子图
 								break;
-							}
+							}*/
 						}//不是clique
 						
 					}//stack不空
@@ -469,9 +465,7 @@ public class DetectTimeAll {
 
 			tmpKey = key.get();
 			if (thenode.contains(tmpKey)) {// tmpKey == thenode单节点时如此
-				long tp1, tp2;
-				tp1 = System.currentTimeMillis();
-				tp2 = tp1;
+				
 				vertex.clear();
 				verEdge.clear();
 				parts.clear();
@@ -547,9 +541,6 @@ public class DetectTimeAll {
 						}
 					}
 
-					tp2 = System.currentTimeMillis();
-					preparetime += (tp2 - tp1);
-
 					if (tcand.size() < MaxOne)
 						return;
 
@@ -596,7 +587,7 @@ public class DetectTimeAll {
 									aim);
 							Status ss = new Status(aim, level + 1, aimSet,
 									aimnotset, null, null);
-							if (aimSet.size() <= sizeN) {
+							if (aimSet.size() <= sizeN && (tPhase <= TimeThreshold)) {
 								computeSmallGraph(ss, context, 1);
 							} else {
 								spillToDisk(ss, raf);
@@ -620,15 +611,13 @@ public class DetectTimeAll {
 									break;
 								}
 							}
-							t2 = System.currentTimeMillis();
-							tPhase += (t2 - t1);
-							t1 = t2;// 重新设定累计起点
-							if (tPhase > TimeThreshold) {
-								
-								//spillToDisk(top, raf);
-								break;
+							if (tPhase <= TimeThreshold) {
+								t2 = System.currentTimeMillis();
+								tPhase += (t2 - t1);
+								t1 = t2;// 重新设定累计起点
 							}
 						}
+						/**
 						if (tPhase > TimeThreshold) {
 							System.out.println("time is out! during cutting");
 							while (cand.size() + level > MaxOne + 1
@@ -666,7 +655,7 @@ public class DetectTimeAll {
 									}
 								}
 							}
-						}
+						}*/
 					}
 					if (balanceOrNot) {
 						// 若份数比totalPart大则每个reduce发一份，否则只发对应份
@@ -694,9 +683,6 @@ public class DetectTimeAll {
 							tcand.put(et.getKey(), et.getValue());
 						}
 					}
-
-					tp2 = System.currentTimeMillis();
-					preparetime += (tp2 - tp1);
 
 					if (tcand.size() < MaxOne)
 						return;

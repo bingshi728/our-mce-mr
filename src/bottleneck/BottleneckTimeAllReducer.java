@@ -257,7 +257,7 @@ public class BottleneckTimeAllReducer {
 										notset, aim);
 								Status ss = new Status(aim, level + 1, aimSet,
 										aimnotset, null, null);
-								if (aimSet.size() <= sizeN)
+								if (aimSet.size() <= sizeN && tPhase <= TimeThreshold)
 									computeSmallGraph(ss, context,1);
 								else {
 									stack.add(ss);
@@ -281,13 +281,12 @@ public class BottleneckTimeAllReducer {
 										break;
 									}
 								}
-								t2 = System.currentTimeMillis();
-								tPhase += (t2 - t1);
-								t1 = t2;
-								if (tPhase > TimeThreshold) {
-									break;
+								if (tPhase <= TimeThreshold) {
+									t2 = System.currentTimeMillis();
+									tPhase += (t2 - t1);
+									t1 = t2;
 								}
-							}
+							}/**
 							if(tPhase > TimeThreshold){
 								while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
 									Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
@@ -326,7 +325,7 @@ public class BottleneckTimeAllReducer {
 									}
 								}
 								break;
-							}
+							}*/
 						}
 						
 					}
@@ -517,7 +516,7 @@ public class BottleneckTimeAllReducer {
 									aim);
 							Status ss = new Status(aim, level + 1, aimSet,
 									aimnotset, null, null);
-							if (aimSet.size() <= sizeN)
+							if (aimSet.size() <= sizeN && tPhase <= TimeThreshold)
 								computeSmallGraph(ss, context,1);
 							else {
 								spillToDisk(ss, raf);
@@ -542,16 +541,13 @@ public class BottleneckTimeAllReducer {
 								}
 							}
 							
-							t2 = System.currentTimeMillis();
-							tPhase += (t2 - t1);
-							t1 = t2;// 重新设定累计起点
-							if (tPhase > TimeThreshold) {
-								System.out.println("in clean up INNER time is out:"
-										+ (tPhase > TimeThreshold) + "\tt is "
-										+ tPhase + "\tpahse is " + TimeThreshold);
-								break;
+							if (tPhase <= TimeThreshold) {
+								t2 = System.currentTimeMillis();
+								tPhase += (t2 - t1);
+								t1 = t2;// 重新设定累计起点
 							}
 						}
+						/**
 						if(tPhase > TimeThreshold){
 							while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
 								Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
@@ -588,10 +584,8 @@ public class BottleneckTimeAllReducer {
 								}
 							}
 							break;
-						}
+						}**/
 					}//不是clique
-					
-				
 			}
 			while (!stack.empty()) {// 未算完的spill到磁盘
 				spillToDisk(stack.pop(), raf);
