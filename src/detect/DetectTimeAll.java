@@ -176,6 +176,7 @@ public class DetectTimeAll {
 		@Override
 		protected void cleanup(Context context) throws IOException,
 				InterruptedException {
+			
 			System.out.println("prepare cost:" + preparetime);
 			System.out.println("in clean up START time is out:"
 					+ (tPhase > TimeThreshold) + "\tt is " + tPhase
@@ -227,7 +228,8 @@ public class DetectTimeAll {
 					}
 					// 一个完整的子图已经都读进来了，计算这个子图
 					System.out.println("read in a hole sub graph");
-
+					
+					balanceOrNot = false;
 					parts.clear();
 					while (!stack.empty()) {
 						Status top = stack.pop();
@@ -275,11 +277,16 @@ public class DetectTimeAll {
 										notset, aim);
 								Status ss = new Status(aim, level + 1, aimSet,
 										aimnotset, null, null);
-								if (aimSet.size() <= sizeN && tPhase <= TimeThreshold)
-									computeSmallGraph(ss, context, 1);
-								else {
-									stack.add(ss);
+								if(tPhase <= TimeThreshold){
+									if (aimSet.size() <= sizeN )
+										computeSmallGraph(ss, context, 1);
+									else {
+										stack.add(ss);
+									}
+								}else{
+									spillToDisk(ss, rnew);
 								}
+								
 								notset.add(aim);
 								if (judgeClique(d2c)) {
 									if (cand.size() > 0) {
@@ -305,57 +312,16 @@ public class DetectTimeAll {
 									t1 = t2;
 								}
 							}
-							/**
-							if(tPhase > TimeThreshold){
-								System.out.println("time is out, just cut the current subgraph");
-								//即使超过时间阀值,还是要将当前子图切掉
-								while (cand.size() + level > MaxOne + 1
-										&& cand.size() > 1) {
-									Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
-											.firstEntry();
-									aim = firstEntry.getValue().iterator().next();//
-									mindeg = firstEntry.getKey();
-									HashMap<Integer, Integer> aimSet = updateMarkDeg(
-											aim, mindeg, cand, d2c, od2c);
-									HashSet<Integer> aimnotset = genInterSet(
-											notset, aim);
-									Status ss = new Status(aim, level + 1, aimSet,
-											aimnotset, null, null);
-									//直接spill到磁盘
-									spillToDisk(ss,rnew);
-									
-									notset.add(aim);
-									if (judgeClique(d2c)) {
-										if (cand.size() > 0) {
-											Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
-													.lastEntry();
-											aim = lastEntry.getValue().iterator()
-													.next();
-											notset.retainAll(verEdge.get(aim));
-										}
-										if (level + cand.size() <= MaxOne) {
-											break;
-										}
-										if (allContained(cand, notset)) {
-											break;
-										} else {
-											emitClique(result, level, cand, context);
-											break;
-										}
-									}
-								}
-								//当前subGraph已经切完,不再切stack中的子图
-								break;
-							}*/
 						}//不是clique
-						
+						if (tPhase > TimeThreshold) {
+							break;
+						}
 					}//stack不空
-					boolean needtospillveredge = !stack.empty();
 					while (!stack.empty()) {
 						// 退出了栈还没空，说明时间到了还没计算完，把栈中的子图spill到磁盘
 						spillToDisk(stack.pop(), rnew);
 					}
-					if (needtospillveredge) {
+					if (balanceOrNot) {
 						rnew.write(((-2) + "\t" + 1 + "#").getBytes());
 						String pas = parts.toString();
 						rnew.write(pas.substring(1, pas.length() - 1)
@@ -577,6 +543,7 @@ public class DetectTimeAll {
 						int aim = 0, mindeg = Integer.MAX_VALUE;
 						while (cand.size() + level > MaxOne + 1
 								&& cand.size() > 1) {
+							System.out.println("cutt "+tmpKey);
 							Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
 									.firstEntry();
 							aim = firstEntry.getValue().iterator().next();//
@@ -617,45 +584,6 @@ public class DetectTimeAll {
 								t1 = t2;// 重新设定累计起点
 							}
 						}
-						/**
-						if (tPhase > TimeThreshold) {
-							System.out.println("time is out! during cutting");
-							while (cand.size() + level > MaxOne + 1
-									&& cand.size() > 1) {
-								Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
-										.firstEntry();
-								aim = firstEntry.getValue().iterator().next();//
-								mindeg = firstEntry.getKey();
-								HashMap<Integer, Integer> aimSet = updateMarkDeg(
-										aim, mindeg, cand, d2c, od2c);
-								HashSet<Integer> aimnotset = genInterSet(notset,
-										aim);
-								Status ss = new Status(aim, level + 1, aimSet,
-										aimnotset, null, null);
-								
-								spillToDisk(ss, raf);
-								
-								notset.add(aim);
-								if (judgeClique(d2c)) {
-									if (cand.size() > 0) {
-										Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
-												.lastEntry();
-										aim = lastEntry.getValue().iterator()
-												.next();
-										notset.retainAll(verEdge.get(aim));
-									}
-									if (level + cand.size() <= MaxOne) {
-										break;
-									}
-									if (allContained(cand, notset)) {
-										break;
-									} else {
-										emitClique(result, level, cand, context);
-										break;
-									}
-								}
-							}
-						}*/
 					}
 					if (balanceOrNot) {
 						// 若份数比totalPart大则每个reduce发一份，否则只发对应份
@@ -872,12 +800,6 @@ public class DetectTimeAll {
 			sb.append(p);
 			sb.append("@" + tmpKey + "@");
 			sb.append(ss.toString(result));
-			/**
-			 * sb.append("@");
-			 * 
-			 * for (int i = 0; i < ss.getLevel() - 1; i++) {
-			 * sb.append(result.get(i)); sb.append(","); }
-			 */
 			sb.append("\n");
 			count++;
 			raf.write(sb.toString().getBytes());

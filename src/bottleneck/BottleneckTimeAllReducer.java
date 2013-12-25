@@ -211,6 +211,7 @@ public class BottleneckTimeAllReducer {
 					}
 
 					// 一个完整的子图已经都读进来了，计算这个子图
+					balanceOrNot = false;
 					parts.clear();
 					while (!stack.empty()) {
 						Status top = stack.pop();
@@ -257,11 +258,17 @@ public class BottleneckTimeAllReducer {
 										notset, aim);
 								Status ss = new Status(aim, level + 1, aimSet,
 										aimnotset, null, null);
-								if (aimSet.size() <= sizeN && tPhase <= TimeThreshold)
-									computeSmallGraph(ss, context,1);
-								else {
-									stack.add(ss);
+								
+								if(tPhase <= TimeThreshold){
+									if (aimSet.size() <= sizeN )
+										computeSmallGraph(ss, context, 1);
+									else {
+										stack.add(ss);
+									}
+								}else{
+									this.spillToDisk(ss, rnew);
 								}
+								
 								notset.add(aim);
 								if (judgeClique(d2c)) {
 									if (cand.size() > 0) {
@@ -286,55 +293,17 @@ public class BottleneckTimeAllReducer {
 									tPhase += (t2 - t1);
 									t1 = t2;
 								}
-							}/**
-							if(tPhase > TimeThreshold){
-								while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
-									Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
-											.firstEntry();
-									aim = firstEntry.getValue().iterator().next();//
-									mindeg = firstEntry.getKey();
-									HashMap<Integer, Integer> aimSet = updateMarkDeg(
-											aim, mindeg, cand, d2c, od2c);
-									HashSet<Integer> aimnotset = genInterSet(
-											notset, aim);
-									Status ss = new Status(aim, level + 1, aimSet,
-											aimnotset, null, null);
-									if (aimSet.size() <= sizeN)
-										computeSmallGraph(ss, context,1);
-									else {
-										stack.add(ss);
-									}
-									notset.add(aim);
-									if (judgeClique(d2c)) {
-										if (cand.size() > 0) {
-											Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
-													.lastEntry();
-											aim = lastEntry.getValue().iterator()
-													.next();
-											notset.retainAll(verEdge.get(aim));
-										}
-										if(level+cand.size()<=MaxOne){
-											break;
-										}
-										if (allContained(cand, notset)) {
-											break;
-										} else {
-											emitClique(result, level, cand, context);
-											break;
-										}
-									}
-								}
-								break;
-							}*/
+							}
 						}
-						
+						if (tPhase > TimeThreshold) {
+							break;
+						}
 					}
-					boolean needtospillveredge = !stack.empty();
 					while (!stack.empty()) {
 						// 退出了栈还没空，说明时间到了还没计算完，把栈中的子图spill到磁盘
 						spillToDisk(stack.pop(), rnew);
 					}
-					if (needtospillveredge) {
+					if (balanceOrNot) {
 						rnew.write(((-2) + "\t" + 1 + "#" ).getBytes());
 						String pas = parts.toString();
 						rnew.write(pas.substring(1, pas.length()-1).getBytes());
@@ -345,7 +314,7 @@ public class BottleneckTimeAllReducer {
 					if (tPhase > TimeThreshold) {
 						break;
 					}// 超时之后，后面文件也不读了
-				}// while
+				}// while stack isnot empty
 				while ((line = raf.readLine()) != null) {
 					// 把原文件后面的内容直接考到新文件后面
 					rnew.write(line.getBytes());
@@ -411,6 +380,7 @@ public class BottleneckTimeAllReducer {
 				Context context) throws IOException, InterruptedException {
 			tmpKey = key.getC();
 			int type = key.getA();
+			stack.clear();
 			vertex.clear();
 			verEdge.clear();
 			count = 0;
@@ -432,7 +402,7 @@ public class BottleneckTimeAllReducer {
 						if (ver.contains("%")) {
 							// 是不全的子图
 							stack.add(new Status(ver));
-						} else {
+						} else if(verEdge.size()==0) {//可能上一个phase有多个邻接表信息,只要一个就够了
 							// 是邻接表
 							readVerEdge(ver, verEdge);
 						}
@@ -454,7 +424,7 @@ public class BottleneckTimeAllReducer {
 									+ tmpKey + "@").getBytes());
 							raf.write(ver.getBytes());
 							raf.write("\n".getBytes());
-						} else {
+						} else if(edgestr.length()==0){
 							edgestr = ver;
 						}
 					} else {
@@ -486,7 +456,9 @@ public class BottleneckTimeAllReducer {
 						continue;
 					}
 					if (allContained(cand, notset)) {
-						return;
+						//this must be fucked here
+						//return;
+						continue;
 					}
 					if (result.size() + 1 == level) {
 						result.add(vp);
@@ -502,7 +474,9 @@ public class BottleneckTimeAllReducer {
 					}
 					if (judgeClique(d2c)) {
 						emitClique(result, level, cand, context);
-						return;
+						//this must be fucked here
+						//return;
+						continue;
 					} else {
 						int aim = 0, mindeg = Integer.MAX_VALUE;
 						while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
@@ -547,59 +521,21 @@ public class BottleneckTimeAllReducer {
 								t1 = t2;// 重新设定累计起点
 							}
 						}
-						/**
-						if(tPhase > TimeThreshold){
-							while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
-								Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
-										.firstEntry();
-								aim = firstEntry.getValue().iterator().next();//
-								mindeg = firstEntry.getKey();
-								HashMap<Integer, Integer> aimSet = updateMarkDeg(
-										aim, mindeg, cand, d2c, od2c);
-								HashSet<Integer> aimnotset = genInterSet(notset,
-										aim);
-								Status ss = new Status(aim, level + 1, aimSet,
-										aimnotset, null, null);
-								
-								spillToDisk(ss, raf);
-								
-								notset.add(aim);
-								if (judgeClique(d2c)) {
-									if (cand.size() > 0) {
-										Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
-												.lastEntry();
-										aim = lastEntry.getValue().iterator()
-												.next();
-										notset.retainAll(verEdge.get(aim));
-									}
-									if(level+cand.size()<=MaxOne){
-										break;
-									}
-									if (allContained(cand, notset)) {
-										break;
-									} else {
-										emitClique(result, level, cand, context);
-										break;
-									}
-								}
-							}
-							break;
-						}**/
 					}//不是clique
-			}
-			while (!stack.empty()) {// 未算完的spill到磁盘
+					if (tPhase > TimeThreshold) {
+						break;
+					}
+			}//while stack isnot empty
+			while (!stack.empty()) {//未算完的spill到磁盘
 				spillToDisk(stack.pop(), raf);
 			}
 			if (balanceOrNot) {
-				// 若份数比totalPart大则每个reduce发一份，否则只发对应份
-				// 记录最大，每个计算节点发一份
 				raf.write(((-2) + "\t" + 1 + "#" ).getBytes());
 				String pas = parts.toString();
 				raf.write(pas.substring(1, pas.length()-1).getBytes());
 				raf.write(("#"+tmpKey+"#").getBytes());
 				writeVerEdge(verEdge, raf);
 				raf.write(("\n").getBytes());
-				// raf.write(("\n0\t0\n").getBytes());
 			}
 
 		}// reduce
@@ -766,7 +702,7 @@ public class BottleneckTimeAllReducer {
 				throws IOException {
 			// TODO Auto-generated method stub
 			balanceOrNot = true;
-			parts.add(count%totalPart);
+			//parts.add(count%totalPart);
 			StringBuilder sb = new StringBuilder();
 			int p = (count % totalPart)%numReducer;
 			parts.add(p);
@@ -774,13 +710,6 @@ public class BottleneckTimeAllReducer {
 			sb.append(p);
 			sb.append("@" + tmpKey + "@");
 			sb.append(ss.toString(result));
-			/**
-			sb.append("@");
-
-			for (int i = 0; i < ss.getLevel() - 1; i++) {
-				sb.append(result.get(i));
-				sb.append(",");
-			}*/
 			sb.append("\n");
 			count++;
 			raf.write(sb.toString().getBytes());
@@ -998,8 +927,6 @@ public class BottleneckTimeAllReducer {
 				HashSet<Integer> notset) {
 			for (int nt : notset) {
 				HashSet<Integer> nadj = verEdge.get(nt);
-				if(nadj==null)System.out.println(tmpKey+"~~~~~~~~"+nt+"~~~~~~nadj null"+verEdge);
-				if(cand==null)System.out.println("cand null");
 				if (nadj.containsAll(cand.keySet()))
 					return true;
 			}
