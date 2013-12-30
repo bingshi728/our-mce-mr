@@ -40,7 +40,7 @@ public class DetectTimeAll {
 	public static int levelNumber = 0;
 	public static int totalPart = 36;
 	public static int tmpKey = 0;
-	public static int count = 0;
+	public static int count = 0; 
 	public static boolean done = false;
 	// public static ArrayList<Integer> thenode = new ArrayList<Integer>();//
 	// 需要计算的节点集
@@ -92,7 +92,6 @@ public class DetectTimeAll {
 		@Override
 		protected void setup(Context context) throws IOException,
 				InterruptedException {
-			allstart = System.currentTimeMillis();
 
 			numReducer = context.getNumReduceTasks();
 			FileReader fr = new FileReader(new File(dirRoot,
@@ -171,17 +170,19 @@ public class DetectTimeAll {
 			// 获得唯一编号后打开文件
 			File curReduce = new File(dirRoot, "/outresult/binary/" + which);
 			raf = new RandomAccessFile(curReduce, "rw");
+			t1 = System.currentTimeMillis();
 		}
-
+		long t1;
 		@Override
 		protected void cleanup(Context context) throws IOException,
 				InterruptedException {
-			
+			t1 = System.currentTimeMillis();
+			/**
 			System.out.println("prepare cost:" + preparetime);
 			System.out.println("in clean up START time is out:"
 					+ (tPhase > TimeThreshold) + "\tt is " + tPhase
 					+ "\tpahse is " + TimeThreshold);
-			long ta1 = System.currentTimeMillis();
+			*/
 			// reduce运行结束，时间T还没有到，接着读取/home/dic/over/中的文件处理
 			if (raf.getFilePointer() == 0) {
 				raf.close();
@@ -200,7 +201,7 @@ public class DetectTimeAll {
 				RandomAccessFile rnew = new RandomAccessFile(new File(dirRoot,
 						"/outresult/binary/" + which + "#"), "rw");
 				String line = "";
-				long t1 = System.currentTimeMillis();
+				
 				long t2 = System.currentTimeMillis();
 				while ((line = raf.readLine()) != null) {
 					// 是子图或者边邻接信息
@@ -331,21 +332,19 @@ public class DetectTimeAll {
 						rnew.write(("\n").getBytes());// rnew.write(("\n0\t0\n").getBytes());
 					}
 					if (tPhase > TimeThreshold) {
+						/**
 						System.out.println("in clean up OUTER time is out:"
 								+ (tPhase > TimeThreshold) + "\tt is " + tPhase
-								+ "\tpahse is " + TimeThreshold);
+								+ "\tpahse is " + TimeThreshold);*/
 						break;
 					}// 超时之后，后面文件也不读了
 				}// while
 				System.out.println("append left file to end");
-				long tp1 = System.currentTimeMillis();
 				while ((line = raf.readLine()) != null) {
 					// 把原文件后面的内容直接考到新文件后面
 					rnew.write(line.getBytes());
 					rnew.write("\n".getBytes());
 				}
-				long tp2 = System.currentTimeMillis();
-				System.out.println("copy left file used:" + (tp2 - tp1) + "ms");
 				raf.close();
 				File endf = new File(dirRoot, "/outresult/binary/" + which + "");
 				boolean endRES = endf.delete();
@@ -368,14 +367,8 @@ public class DetectTimeAll {
 			} else {
 				raf.close();
 			}
-			System.out.println("cleanup cost"
-					+ (System.currentTimeMillis() - ta1) + "at end");
 			super.cleanup(context);
-			System.out.println("cleanup cost"
-					+ (System.currentTimeMillis() - ta1) + "at end 2");
 
-			allend = System.currentTimeMillis();
-			System.out.println("All const" + (allend - allstart));
 		}
 
 		private void writeVerEdge(HashMap<Integer, HashSet<Integer>> edge,
@@ -421,10 +414,6 @@ public class DetectTimeAll {
 				edge.put(key, adjs);
 			}
 		}
-
-		long allstart = 0;
-		long allend = 0;
-		long preparetime = 0;
 
 		protected void reduce(IntWritable key, Iterable<Text> values,
 				Context context) throws IOException, InterruptedException {
@@ -510,7 +499,6 @@ public class DetectTimeAll {
 					if (tcand.size() < MaxOne)
 						return;
 
-					long t1 = System.currentTimeMillis();
 					long t2 = System.currentTimeMillis();
 					Status top = new Status(tmpKey, 1, vertex, tnot, deg2cand,
 							od2);

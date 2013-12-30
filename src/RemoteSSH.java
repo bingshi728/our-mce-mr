@@ -40,6 +40,13 @@ public class RemoteSSH {
 		try {
 			session = conn.openSession();
 			session.execCommand(cmd);
+			InputStream	in = new StreamGobbler(session.getStdout());
+			BufferedReader br = new BufferedReader(new InputStreamReader(in));
+			String line = "";
+			while((line=br.readLine())!=null){
+				if(line.startsWith("clean"))
+					break;
+			}
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -126,8 +133,8 @@ public class RemoteSSH {
 	 */
 	public static void main(String[] args) throws IOException {
 		// TODO Auto-generated method stub
-		System.out.println(RemoteSSH.getRemoteFilesSize());
-		
+		//System.out.println(RemoteSSH.getRemoteFilesSize());
+		RemoteSSH.batch();
 	}
 
 }

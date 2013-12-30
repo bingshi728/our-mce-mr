@@ -102,11 +102,16 @@ public class Status {
 		re.append(notset.size());
 		re.append(",");// notset size
 		re.append(key.substring(1, key.length() - 1));// notset content
-		if(result != null){
+		if(level > 1){
 			re.append("%");
-			//re.append(result.size());//result size
-			for(int i = 0;i<this.level-1;i++){
-				re.append(result.get(i)+",");//result content
+			if(this.result!=null && this.result.size()>0){
+				for(int i = 0;i<this.level-1;i++){
+					re.append(this.result.get(i)+",");//result content
+				}
+			}else{
+				for(int i = 0;i<this.level-1;i++){
+					re.append(result.get(i)+",");//result content
+				}
 			}
 		}
 		return re.toString();

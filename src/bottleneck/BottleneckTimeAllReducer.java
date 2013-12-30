@@ -42,7 +42,7 @@ public class BottleneckTimeAllReducer {
 	public static int levelNumber = 0;
 	public static int totalPart = 36;
 	public static int tmpKey = 0;
-	public static int count = 0;
+	public static int count = 0; 
 	public static boolean done = false;
 	// public static ArrayList<Integer> thenode = new ArrayList<Integer>();//
 	// 需要计算的节点集
@@ -155,6 +155,7 @@ public class BottleneckTimeAllReducer {
 			File curReduce = new File(dirRoot, "/outresult/binary/"+which);
 			raf = new RandomAccessFile(curReduce, "rw");
 			//raf.write("setup ok".getBytes());
+			t1 = System.currentTimeMillis();
 		}
 
 		int numClique = 0;
@@ -162,7 +163,7 @@ public class BottleneckTimeAllReducer {
 		@Override
 		protected void cleanup(Context context) throws IOException,
 				InterruptedException {
-			
+			t1 = System.currentTimeMillis();
 			// reduce运行结束，时间T还没有到，接着读取/home/dic/over/中的文件处理
 			if (raf.getFilePointer() == 0) {
 				raf.close();
@@ -181,10 +182,7 @@ public class BottleneckTimeAllReducer {
 				RandomAccessFile rnew = new RandomAccessFile(new File(dirRoot,
 						"/outresult/binary/"+which + "#"), "rw");
 				String line = "";
-				String lastline = "";
-				long t1 = System.currentTimeMillis();
 				long t2 = System.currentTimeMillis();
-				boolean gotenough = false;
 				while ((line = raf.readLine()) != null) {
 					// 是子图或者边邻接信息
 					String[] ab = line.split("\t");
@@ -376,6 +374,7 @@ public class BottleneckTimeAllReducer {
 			}
 		}
 
+		long t1;
 		protected void reduce(PairTypeInt key, Iterable<Text> values,
 				Context context) throws IOException, InterruptedException {
 			tmpKey = key.getC();
@@ -415,12 +414,15 @@ public class BottleneckTimeAllReducer {
 			} else {
 				// 边邻接信息写在最后
 				String edgestr = "";
+				parts.clear();
 				for (Text t : values) {
 					NodeSN++;
 					String ver = t.toString();
 					if (type == 1) {
 						if (ver.contains("%")) {
-							raf.write(("-1\t1@" + NodeSN % totalPart + "@"
+							int p = NodeSN % totalPart;
+							parts.add(p);
+							raf.write(("-1\t1@" + p + "@"
 									+ tmpKey + "@").getBytes());
 							raf.write(ver.getBytes());
 							raf.write("\n".getBytes());
@@ -434,13 +436,13 @@ public class BottleneckTimeAllReducer {
 						raf.write("\n".getBytes());
 					}
 				}
-				raf.write(((-2) + "\t" + 1 + "#" +key.getB()).getBytes());
+				String pstr = parts.toString();
+				raf.write(((-2) + "\t" + 1 + "#" +pstr.substring(1, pstr.length()-1)).getBytes());
 				raf.write(("#"+tmpKey+"#").getBytes());
 				raf.write(edgestr.getBytes());
 				raf.write("\n".getBytes());
 				return;
 			}
-			long t1 = System.currentTimeMillis();
 			long t2 = System.currentTimeMillis();
 			while (!stack.empty()) {
 				

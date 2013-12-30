@@ -56,7 +56,7 @@ public class RunOver {
 
 		String in = "binaryinputR";
 
-		Job job = new Job(conf, "bottle neck clique");
+		Job job = new Job(conf, "bottle neck clique "+pre);
 
 		job.setJarByClass(BottleNeck.class);
 		job.setMapperClass(bottleneck.BottleneckMapper.class);
@@ -91,7 +91,9 @@ public class RunOver {
 		reducenum = Integer.valueOf(args[arglen - 1]);
 
 		doStep1(args);
+		
 		synchronized (this) {
+			this.wait(5000);
 			while (((long) RemoteSSH.getRemoteFilesSize()) != 0) {
 				Process p = Runtime
 						.getRuntime()
@@ -100,9 +102,10 @@ public class RunOver {
 				p.waitFor();
 				p.destroy();
 				RemoteSSH.batch();
-				this.wait(10000);
+				this.wait(15000);
 				pre++;
 				doStep2(args);
+				this.wait(5000);
 			}
 		}
 
