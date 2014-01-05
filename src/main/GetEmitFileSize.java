@@ -1,3 +1,4 @@
+package main;
 import java.io.File;
 
 
@@ -8,7 +9,7 @@ public class GetEmitFileSize {
 	 */
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
-		File path = new File("/home/dic/CliqueHadoop/outresult/"+args[0]);
+		File path = new File("/home/"+RunOver.usr+"/CliqueHadoop/outresult/"+args[0]);
 		File[] fs = path.listFiles();
 		long size = 0;
 		for(File f:fs){

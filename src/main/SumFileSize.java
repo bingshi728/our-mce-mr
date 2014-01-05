@@ -1,3 +1,4 @@
+package main;
 import java.io.IOException;
 import java.net.URI;
 
@@ -36,21 +37,29 @@ public class SumFileSize {
 		System.out.println("共"+size/(1024*1024)+"MB");
 	}
 	public static void do1(String[] args) throws IOException{
-		String uri = "hdfs://172.19.0.122:19000/user/";
+		String uri = "hdfs://"+RunOver.masterhost+"/user/";
 		Configuration conf = new Configuration();
 		FileSystem fs  = FileSystem.get(URI.create(uri),conf);
-		Path[] paths = new Path[args.length];
-		for(int i = 0; i < args.length; i++){
-			paths[i] = new Path(uri+"dic/"+args[i]); 
-		}
-		double size = 0L;
-		FileStatus[] fileStatus = fs.listStatus(paths);
+		
+		double size = 0L;int num = 0;
+		FileStatus[] fileStatus = fs.listStatus(new Path(uri+RunOver.usr+"/"));
 		for(FileStatus fstatus : fileStatus){
-			if(fstatus.isDir())
+			if(!fstatus.isDir() || !fstatus.getPath().getName().contains("result_binary"))
 				continue;
-			size += fstatus.getLen();
+			else{
+				FileStatus[] innerFiles = fs.listStatus(fstatus.getPath());
+				for(FileStatus innerFile : innerFiles){
+					if(innerFile.isDir())
+						continue;
+					else{
+						size += innerFile.getLen();
+						num++;
+					}
+				}
+			}
+			
 		}
-		System.out.println(fileStatus.length+"个文件");
+		System.out.println(num+"个文件");
 		System.out.println("共"+size/(1024*1024)+"MB");
 	}
 }

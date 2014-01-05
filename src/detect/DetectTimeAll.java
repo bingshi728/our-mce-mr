@@ -2,9 +2,10 @@ package detect;
 
 //改成开始写磁盘时候只写一份！shuffle时候散对应的份数，少一些写磁盘数据量较小时差别并不是很大！但是考虑数据量很多时有差别！
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
@@ -16,15 +17,15 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
-import java.util.StringTokenizer;
 import java.util.TreeMap;
+
+import main.RunOver;
 
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.Reducer.Context;
 
 //import cliquenew.VariableRecord;
 
@@ -55,15 +56,15 @@ public class DetectTimeAll {
 	public static boolean balanceOrNot = false;
 	public static long tPhase = 0;
 	public static int NodeSN = 0;
-	public static File dirRoot = new File("/home/dic/CliqueHadoop/");
+	public static File dirRoot = new File("/home/"+RunOver.usr+"/CliqueHadoop/");
 	public static File serial = new File(dirRoot, "serialNumber.txt");
-	public static RandomAccessFile raf = null;
+	public static BufferedWriter raf = null;
 	public static int which = 0;// 区分reduce的唯一编号，用于写数据文件
 	public static int MaxOne = 3;// 最小是三角形，初始化时即初始化为三角形
 	public static int randomSelect = 0;
 	public static HashSet<Integer> parts = new HashSet<Integer>();
 	public static int numReducer = 0;
-
+	public static File curReduce;
 	public static class DetectMapper extends
 			Mapper<LongWritable, Text, IntWritable, Text> {
 		IntWritable ok = new IntWritable();
@@ -89,11 +90,15 @@ public class DetectTimeAll {
 		private int maxdeg;
 		private boolean isClique;
 
+		
+		long allStart = 0;
+		long allEnd = 0;
 		@Override
 		protected void setup(Context context) throws IOException,
 				InterruptedException {
 
 			numReducer = context.getNumReduceTasks();
+			count = (int)Math.random()*numReducer;
 			FileReader fr = new FileReader(new File(dirRoot,
 					"trianglenew_NODE.txt"));
 			BufferedReader bfr = new BufferedReader(fr);
@@ -168,9 +173,10 @@ public class DetectTimeAll {
 					rafcur.close();
 			}
 			// 获得唯一编号后打开文件
-			File curReduce = new File(dirRoot, "/outresult/binary/" + which);
-			raf = new RandomAccessFile(curReduce, "rw");
-			t1 = System.currentTimeMillis();
+			curReduce = new File(dirRoot, "/outresult/binary/" + which);
+			raf = new BufferedWriter(new FileWriter(curReduce));
+			
+			allStart = System.currentTimeMillis();
 		}
 		long t1;
 		@Override
@@ -184,22 +190,22 @@ public class DetectTimeAll {
 					+ "\tpahse is " + TimeThreshold);
 			*/
 			// reduce运行结束，时间T还没有到，接着读取/home/dic/over/中的文件处理
-			if (raf.getFilePointer() == 0) {
-				raf.close();
+			raf.close();
+			if (curReduce.length() == 0) {
 				File f = new File(dirRoot, "/outresult/binary/" + which + "");
 				boolean RES = f.delete();
 				System.out.println("this reducer is number:" + which + " "
 						+ "and raf is empty so delete file:" + f.getPath()
 						+ " --" + RES);
-			} else if (raf.getFilePointer() != 0 && tPhase < TimeThreshold) {// 文件中有内容
+			} else if (curReduce.length() != 0 && tPhase < TimeThreshold) {// 文件中有内容
 				Stack<Status> stack = new Stack<Status>();
 				verEdge.clear();
 				stack.clear();
 				result = null;
-				raf.seek(0);
+				BufferedReader raf = new BufferedReader(new FileReader(curReduce));
 				// 重新写入这个文件，原来的文件作废，最后将其删除！
-				RandomAccessFile rnew = new RandomAccessFile(new File(dirRoot,
-						"/outresult/binary/" + which + "#"), "rw");
+				BufferedWriter rnew = new BufferedWriter(new FileWriter(dirRoot+
+						"/outresult/binary/" + which + "#"));
 				String line = "";
 				
 				long t2 = System.currentTimeMillis();
@@ -228,7 +234,7 @@ public class DetectTimeAll {
 						}
 					}
 					// 一个完整的子图已经都读进来了，计算这个子图
-					System.out.println("read in a hole sub graph");
+					//System.out.println("read in a hole sub graph");
 					
 					balanceOrNot = false;
 					parts.clear();
@@ -313,6 +319,18 @@ public class DetectTimeAll {
 									t1 = t2;
 								}
 							}
+//							if(cand.size() + level > MaxOne + 1
+//									&& cand.size() > 1){
+//								spillToDisk(top,rnew);
+//							}
+
+							if (tPhase <= TimeThreshold) {
+								t2 = System.currentTimeMillis();
+								tPhase += (t2 - t1);
+								t1 = t2;
+							}else{
+								break;
+							}
 						}//不是clique
 						if (tPhase > TimeThreshold) {
 							break;
@@ -323,13 +341,13 @@ public class DetectTimeAll {
 						spillToDisk(stack.pop(), rnew);
 					}
 					if (balanceOrNot) {
-						rnew.write(((-2) + "\t" + 1 + "#").getBytes());
+						rnew.write(((-2) + "\t" + 1 + "#") );
 						String pas = parts.toString();
 						rnew.write(pas.substring(1, pas.length() - 1)
-								.getBytes());
-						rnew.write(("#" + tmpKey + "#").getBytes());
+								 );
+						rnew.write(("#" + tmpKey + "#") );
 						writeVerEdge(verEdge, rnew);
-						rnew.write(("\n").getBytes());// rnew.write(("\n0\t0\n").getBytes());
+						rnew.write(("\n") );// rnew.write(("\n0\t0\n") );
 					}
 					if (tPhase > TimeThreshold) {
 						/**
@@ -342,8 +360,8 @@ public class DetectTimeAll {
 				System.out.println("append left file to end");
 				while ((line = raf.readLine()) != null) {
 					// 把原文件后面的内容直接考到新文件后面
-					rnew.write(line.getBytes());
-					rnew.write("\n".getBytes());
+					rnew.write(line );
+					rnew.write("\n" );
 				}
 				raf.close();
 				File endf = new File(dirRoot, "/outresult/binary/" + which + "");
@@ -351,9 +369,11 @@ public class DetectTimeAll {
 				System.out.println("this reducer is number:" + which + " "
 						+ "and clean up to end, so delete file:"
 						+ endf.getPath() + " --" + endRES);
-				if (rnew.getFilePointer() == 0) {
-					File tf = new File(dirRoot, "/outresult/binary/" + which
-							+ "#");
+				rnew.close();
+				File tf = new File(dirRoot, "/outresult/binary/" + which
+						+ "#");
+				if (tf.length() == 0) {
+					
 					boolean ntr = tf.delete();
 					System.out
 							.println("this reducer is number:"
@@ -361,27 +381,25 @@ public class DetectTimeAll {
 									+ " "
 									+ "and clean up to end & rnew is empty, so delete file:"
 									+ tf.getPath() + " --" + ntr);
-				} else {
-					rnew.close();
 				}
-			} else {
-				raf.close();
 			}
 			super.cleanup(context);
 
+			allEnd = System.currentTimeMillis();
+			System.out.println("all time: "+(allEnd - allStart)/1000);
 		}
 
 		private void writeVerEdge(HashMap<Integer, HashSet<Integer>> edge,
-				RandomAccessFile rf) throws IOException {
+				BufferedWriter rf) throws IOException {
 			for (Map.Entry<Integer, HashSet<Integer>> en : edge.entrySet()) {
 				// rf.write(en.getKey());
-				rf.write((en.getKey() + "=").getBytes());
+				rf.write((en.getKey() + "=") );
 				Iterator<Integer> it = en.getValue().iterator();
-				rf.write(it.next().toString().getBytes());
+				rf.write(it.next().toString() );
 				while (it.hasNext()) {
-					rf.write(("," + it.next()).getBytes());
+					rf.write(("," + it.next()) );
 				}
-				rf.write(" ".getBytes());
+				rf.write(" " );
 			}
 		}
 
@@ -417,64 +435,68 @@ public class DetectTimeAll {
 
 		protected void reduce(IntWritable key, Iterable<Text> values,
 				Context context) throws IOException, InterruptedException {
-
+			t1 = System.currentTimeMillis();
+			
 			tmpKey = key.get();
 			if (thenode.contains(tmpKey)) {// tmpKey == thenode单节点时如此
+//				System.out.println(tmpKey);
+			//if(true){
 				
-				vertex.clear();
-				verEdge.clear();
-				parts.clear();
-				count = 0;
-				notset.clear();
-				cand.clear();
-				deg2cand.clear();
-				od2.clear();
-				number = 0;
-				triangleNumber = 0;// 每次初始化
-				cutNumber = 0;
-				cutNumberAfter = 0;
-				balanceOrNot = false;
 				NodeSN++;
-				for (Text t : values) {
-					String ver = t.toString();
-					triangleNumber++;
-					String[] edgepoint = ver.split(",");
-					int node1 = Integer.valueOf(edgepoint[0]);
-					int node2 = Integer.valueOf(edgepoint[1]);
-					// 顶点度数统计，暂时可能用不上，记录，若成为耗时一环再删除，单只记录顶点
-					if (vertex.containsKey(node1)) {
-						vertex.put(node1, vertex.get(node1) + 1);
-					} else {
-						vertex.put(node1, 1);
-					}
-					if (vertex.containsKey(node2)) {
-						vertex.put(node2, vertex.get(node2) + 1);
-					} else {
-						vertex.put(node2, 1);
-					}
-					// 顶点相邻边的统计
-					HashSet<Integer> tmp = verEdge.get(node1);
-					if (tmp != null) {
-						tmp.add(node2);
-						// verEdge.put(node1, tmp);
-					} else {
-						tmp = new HashSet<Integer>();
-						// tmp.add(node1);
-						tmp.add(node2);
-						verEdge.put(node1, tmp);
-					}
-					tmp = verEdge.get(node2);
-					if (tmp != null) {
-						tmp.add(node1);
-						// verEdge.put(node2, tmp);
-					} else {
-						tmp = new HashSet<Integer>();
-						tmp.add(node1);
-						verEdge.put(node2, tmp);
-					}
-				}
 				if (tPhase < TimeThreshold) // 时间小于阈值
 				{
+					vertex.clear();
+					verEdge.clear();
+					parts.clear();
+					count = 0;
+					notset.clear();
+					cand.clear();
+					deg2cand.clear();
+					od2.clear();
+					number = 0;
+					triangleNumber = 0;// 每次初始化
+					cutNumber = 0;
+					cutNumberAfter = 0;
+					balanceOrNot = false;
+					for (Text t : values) {
+						String ver = t.toString();
+						triangleNumber++;
+						String[] edgepoint = ver.split(",");
+						int node1 = Integer.valueOf(edgepoint[0]);
+						int node2 = Integer.valueOf(edgepoint[1]);
+						// 顶点度数统计，暂时可能用不上，记录，若成为耗时一环再删除，单只记录顶点
+						if (vertex.containsKey(node1)) {
+							vertex.put(node1, vertex.get(node1) + 1);
+						} else {
+							vertex.put(node1, 1);
+						}
+						if (vertex.containsKey(node2)) {
+							vertex.put(node2, vertex.get(node2) + 1);
+						} else {
+							vertex.put(node2, 1);
+						}
+						// 顶点相邻边的统计
+						HashSet<Integer> tmp = verEdge.get(node1);
+						if (tmp != null) {
+							tmp.add(node2);
+							// verEdge.put(node1, tmp);
+						} else {
+							tmp = new HashSet<Integer>();
+							// tmp.add(node1);
+							tmp.add(node2);
+							verEdge.put(node1, tmp);
+						}
+						tmp = verEdge.get(node2);
+						if (tmp != null) {
+							tmp.add(node1);
+							// verEdge.put(node2, tmp);
+						} else {
+							tmp = new HashSet<Integer>();
+							tmp.add(node1);
+							verEdge.put(node2, tmp);
+						}
+					}
+				
 					Iterator<Map.Entry<Integer, Integer>> iter = vertex
 							.entrySet().iterator();
 					HashMap<Integer, Integer> tcand = new HashMap<Integer, Integer>();
@@ -531,7 +553,7 @@ public class DetectTimeAll {
 						int aim = 0, mindeg = Integer.MAX_VALUE;
 						while (cand.size() + level > MaxOne + 1
 								&& cand.size() > 1) {
-							System.out.println("cutt "+tmpKey);
+							//System.out.println("cutt "+tmpKey);
 							Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
 									.firstEntry();
 							aim = firstEntry.getValue().iterator().next();//
@@ -572,21 +594,61 @@ public class DetectTimeAll {
 								t1 = t2;// 重新设定累计起点
 							}
 						}
+						
+//						if(cand.size() + level > MaxOne + 1
+//								&& cand.size() > 1){
+//							spillToDisk(top, raf);
+//						}
 					}
 					if (balanceOrNot) {
 						// 若份数比totalPart大则每个reduce发一份，否则只发对应份
 						// 记录最大，每个计算节点发一份
-						raf.write(((-2) + "\t" + 1 + "#").getBytes());
+						raf.write(((-2) + "\t" + 1 + "#") );
 						String pas = parts.toString();
-						raf.write(pas.substring(1, pas.length() - 1).getBytes());
-						raf.write(("#" + tmpKey + "#").getBytes());
+						raf.write(pas.substring(1, pas.length() - 1) );
+						raf.write(("#" + tmpKey + "#") );
 						writeVerEdge(verEdge, raf);
-						raf.write(("\n").getBytes());
-						// raf.write(("\n0\t0\n").getBytes());
+						raf.write(("\n") );
+						// raf.write(("\n0\t0\n") );
 					}
 				} else// 时间超阈值，状态直接发往下一个phase
 				{
-					System.out.println("time is out! during generating");
+					System.out.println("time is out so generate size-1 graph for node"+tmpKey);
+					for (Text t : values) {
+						String ver = t.toString();
+						triangleNumber++;
+						String[] edgepoint = ver.split(",");
+						int node1 = Integer.valueOf(edgepoint[0]);
+						int node2 = Integer.valueOf(edgepoint[1]);
+						// 顶点度数统计，暂时可能用不上，记录，若成为耗时一环再删除，单只记录顶点
+						
+							vertex.put(node1, 1);
+						
+						
+							vertex.put(node2, 1);
+						
+						// 顶点相邻边的统计
+						HashSet<Integer> tmp = verEdge.get(node1);
+						if (tmp != null) {
+							tmp.add(node2);
+							// verEdge.put(node1, tmp);
+						} else {
+							tmp = new HashSet<Integer>();
+							// tmp.add(node1);
+							tmp.add(node2);
+							verEdge.put(node1, tmp);
+						}
+						tmp = verEdge.get(node2);
+						if (tmp != null) {
+							tmp.add(node1);
+							// verEdge.put(node2, tmp);
+						} else {
+							tmp = new HashSet<Integer>();
+							tmp.add(node1);
+							verEdge.put(node2, tmp);
+						}
+					}
+					//System.out.println("time is out! during generating");
 					Iterator<Map.Entry<Integer, Integer>> iter = vertex
 							.entrySet().iterator();
 					HashMap<Integer, Integer> tcand = new HashMap<Integer, Integer>();
@@ -608,12 +670,16 @@ public class DetectTimeAll {
 					// 整个状态发往下一个步骤，发往节点为p，边连接情况也只用发往p
 					int p = NodeSN % totalPart;
 					raf.write(((-1) + "\t" + 0 + "@" + p + "@" + tmpKey + "@"
-							+ top.toString(result) + "@").getBytes());
+							+ top.toString(result) + "@") );
 					writeVerEdge(verEdge, raf);
-					raf.write(("\n").getBytes());
+					raf.write(("\n") );
 				}// 计算末尾
+				if (tPhase <= TimeThreshold) {
+					long t2 = System.currentTimeMillis();
+					tPhase += (t2 - t1);
+					t1 = t2;// 重新设定累计起点
+				}
 			}// if该节点需要计算
-
 		}// reduce
 
 		private void computeSmallGraph(Status sst, Context context, int type)
@@ -776,7 +842,7 @@ public class DetectTimeAll {
 			return deg;
 		}
 
-		private void spillToDisk(Status ss, RandomAccessFile raf)
+		private void spillToDisk(Status ss, BufferedWriter raf)
 				throws IOException {
 			// TODO Auto-generated method stub
 			balanceOrNot = true;
@@ -790,7 +856,7 @@ public class DetectTimeAll {
 			sb.append(ss.toString(result));
 			sb.append("\n");
 			count++;
-			raf.write(sb.toString().getBytes());
+			raf.write(sb.toString() );
 		}
 
 		private HashMap<Integer, Integer> updateMarkDeg(int aim, int mindeg,
@@ -866,6 +932,7 @@ public class DetectTimeAll {
 		private void emitClique(ArrayList<Integer> result2, int level,
 				HashMap<Integer, Integer> cand, Context context)
 				throws IOException, InterruptedException {
+		
 			StringBuilder sb = new StringBuilder();
 			for (int i = 1; i < level; i++) {
 				sb.append(result.get(i)).append(" ");
@@ -875,6 +942,7 @@ public class DetectTimeAll {
 			}
 			context.write(new IntWritable(result.get(0)),
 					new Text(sb.toString()));
+			
 		}
 
 		private boolean judgeClique(HashMap<Integer, HashSet<Integer>> d2c) {

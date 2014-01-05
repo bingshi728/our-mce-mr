@@ -1,3 +1,4 @@
+package main;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
@@ -54,13 +55,13 @@ public class RemoteSSH {
 		
 	}
 	public static String batch() throws IOException{
-		BufferedReader br = new BufferedReader(new FileReader("/home/dic/youlish/slaves"));
+		BufferedReader br = new BufferedReader(new FileReader("/home/"+RunOver.usr+"/youlish/slaves"));
 		String line = "";
 		String result = "";
 		while((line=br.readLine())!=null){
-			RemoteSSH rss = new RemoteSSH(line,"dic","123123",null);
+			RemoteSSH rss = new RemoteSSH(line,RunOver.usr,RunOver.passwd,null);
 			rss.login();
-			rss.cleanExe("cd /home/dic/youlish/ && ~/youlish/putBinary2dfs.sh");
+			rss.cleanExe("cd /home/"+RunOver.usr+"/youlish/ && ~/youlish/putBinary2dfs.sh");
 			rss.closeConnection();
 		}
 		return result;
@@ -116,12 +117,12 @@ public class RemoteSSH {
 	
 	public static double getRemoteFilesSize() throws NumberFormatException, IOException{
 		double size = 0.0;
-		BufferedReader br = new BufferedReader(new FileReader("/home/dic/youlish/slaves"));
+		BufferedReader br = new BufferedReader(new FileReader("/home/"+RunOver.usr+"/youlish/slaves"));
 		String line = "";
 		while((line=br.readLine())!=null){
-			RemoteSSH rss = new RemoteSSH(line,"dic","123123",null);
+			RemoteSSH rss = new RemoteSSH(line,RunOver.usr,RunOver.passwd,null);
 			rss.login();
-			String res = rss.exec("cd /home/dic/youlish/ && java GetEmitFileSize binary");
+			String res = rss.exec("cd /home/"+RunOver.usr+"/youlish/ && java GetEmitFileSize binary");
 			rss.closeConnection();
 			size += Double.parseDouble(res);
 		}
