@@ -17,10 +17,10 @@ import cliquenew.CliqueMain;
 import detect.DetectTimeAll;
 
 public class RunOver {
-	public static final String usr = "dic";
-	public static final String passwd = "123123";
-	public static final String masterhost = "test122:19000";
-	public static final String hadoophome = "/home/"+usr+"/hadoop-1.1.2/";
+	public static final String usr = "wzhuo";
+	public static final String passwd = "111";
+	public static final String masterhost = "test164:19000";
+	public static final String hadoophome = "/home/"+usr+"/hadoopyouli/";
 	int arglen;
 	int pre = 0;
 	int reducenum;
