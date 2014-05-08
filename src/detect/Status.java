@@ -8,7 +8,7 @@ import java.util.TreeMap;
 
 public class Status {
 
-	private HashMap<Integer, Integer> candidate;
+	private HashMap<Integer, Node> candidate;
 	private HashSet<Integer> notset;
 	private ArrayList<Integer> result;
 	private int level;
@@ -20,7 +20,7 @@ public class Status {
 		this.read(s);
 	}
 
-	public Status(int tmpKey, int i, HashMap<Integer, Integer> vertex,
+	public Status(int tmpKey, int i, HashMap<Integer, Node> vertex,
 			HashSet<Integer> tnot,
 			HashMap<Integer, HashSet<Integer>> deg2cand2,
 			TreeMap<Integer, HashSet<Integer>> od) {
@@ -56,11 +56,11 @@ public class Status {
 		this.vp = vp;
 	}
 
-	public void setCandidate(HashMap<Integer, Integer> init) {
+	public void setCandidate(HashMap<Integer, Node> init) {
 		this.candidate = init;
 	}
 
-	public HashMap<Integer, Integer> getCandidate() {
+	public HashMap<Integer, Node> getCandidate() {
 		return this.candidate;
 	}
 
@@ -125,9 +125,9 @@ public class Status {
 		String candStr = elms[2];
 		String[] ens = candStr.split(",");
 		int candsize = Integer.parseInt(ens[0]);
-		this.candidate = new HashMap<Integer, Integer>(candsize);
+		this.candidate = new HashMap<Integer, Node>(candsize);
 		for (int i = 1; i < ens.length; i++) {
-			this.candidate.put(Integer.parseInt(ens[i].trim()), 0);
+			this.candidate.put(Integer.parseInt(ens[i].trim()), null);
 		}
 		String notStr = elms[3];
 		String[] enls = notStr.split(",");

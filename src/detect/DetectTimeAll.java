@@ -11,6 +11,7 @@ import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -30,7 +31,7 @@ import org.apache.hadoop.mapreduce.Reducer;
 //import cliquenew.VariableRecord;
 
 public class DetectTimeAll {
-	public static HashMap<Integer, Integer> vertex = new HashMap<Integer, Integer>(
+	public static HashMap<Integer, Node> vertex = new HashMap<Integer, Node>(
 			3000);
 	public static HashMap<Integer, HashSet<Integer>> verEdge = new HashMap<Integer, HashSet<Integer>>(
 			3000);
@@ -84,9 +85,9 @@ public class DetectTimeAll {
 			Reducer<IntWritable, Text, IntWritable, Text> {
 		HashSet<Integer> notset = new HashSet<Integer>();
 		HashMap<Integer, Integer> cand = new HashMap<Integer, Integer>();
-		HashMap<Integer, HashSet<Integer>> deg2cand = new HashMap<Integer, HashSet<Integer>>();
+		HashMap<Integer, HashSet<Integer>> deg2cand = new HashMap<Integer, HashSet<Integer>>(10000);
 		TreeMap<Integer, HashSet<Integer>> od2 = new TreeMap<Integer, HashSet<Integer>>();
-
+static int treesize = 0;
 		private int maxdeg;
 		private boolean isClique;
 
@@ -241,9 +242,7 @@ public class DetectTimeAll {
 					while (!stack.empty()) {
 						Status top = stack.pop();
 						HashSet<Integer> notset = top.getNotset();
-						HashMap<Integer, Integer> cand = top.getCandidate();
-						HashMap<Integer, HashSet<Integer>> d2c;
-						TreeMap<Integer, HashSet<Integer>> od2c;
+						HashMap<Integer, Node> cand = top.getCandidate();
 						int level = top.getLevel();
 						int vp = top.getVp();
 						if (top.getResult() != null) {
@@ -260,30 +259,26 @@ public class DetectTimeAll {
 						} else {
 							result.set(level - 1, vp);
 						}
-						d2c = top.getDeg2cand();
-						od2c = top.getOd2c();
-						if (d2c == null) {
-							d2c = new HashMap<Integer, HashSet<Integer>>();
-							od2c = new TreeMap<Integer, HashSet<Integer>>();
-							updateDeg(cand, d2c, od2c);
-						}
-						if (judgeClique(d2c)) {
+						DegList deglist =
+							updateDeg(cand);
+						
+						if (judgeClique(deglist)) {
 							emitClique(result, level, cand, context);
 							continue;
 						} else {
-							int aim = 0, mindeg = Integer.MAX_VALUE;
+							Integer aim = 0, mindeg = Integer.MAX_VALUE;
 							while (cand.size() + level > MaxOne + 1
 									&& cand.size() > 1) {
-								Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
-										.firstEntry();
-								aim = firstEntry.getValue().iterator().next();//
-								mindeg = firstEntry.getKey();
-								HashMap<Integer, Integer> aimSet = updateMarkDeg(
-										aim, mindeg, cand, d2c, od2c);
+								Node firstEntry = deglist.getHead();
+								aim = firstEntry.points.iterator().next();//
+								mindeg = firstEntry.deg;
+								HashMap<Integer, Node> aimSet = updateMarkDeg(
+										aim, mindeg, cand, deglist);
 								HashSet<Integer> aimnotset = genInterSet(
 										notset, aim);
 								Status ss = new Status(aim, level + 1, aimSet,
 										aimnotset, null, null);
+treesize++;
 								if(tPhase <= TimeThreshold){
 									if (aimSet.size() <= sizeN )
 										computeSmallGraph(ss, context, 1);
@@ -293,13 +288,16 @@ public class DetectTimeAll {
 								}else{
 									spillToDisk(ss, rnew);
 								}
+//								if (aimSet.size() <= sizeN &&  tPhase<=TimeThreshold)
+//									computeSmallGraph(ss, context, 1);
+//								else {
+//									spillToDisk(ss, rnew);
+//								}
 								
 								notset.add(aim);
-								if (judgeClique(d2c)) {
+								if (judgeClique(deglist)) {
 									if (cand.size() > 0) {
-										Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
-												.lastEntry();
-										aim = lastEntry.getValue().iterator()
+										aim = deglist.getTail().points.iterator()
 												.next();
 										notset.retainAll(verEdge.get(aim));
 									}
@@ -387,6 +385,7 @@ public class DetectTimeAll {
 
 			allEnd = System.currentTimeMillis();
 			System.out.println("all time: "+(allEnd - allStart)/1000);
+System.out.println(treesize);
 		}
 
 		private void writeVerEdge(HashMap<Integer, HashSet<Integer>> edge,
@@ -435,12 +434,11 @@ public class DetectTimeAll {
 
 		protected void reduce(IntWritable key, Iterable<Text> values,
 				Context context) throws IOException, InterruptedException {
-			t1 = System.currentTimeMillis();
+			
 			
 			tmpKey = key.get();
 			if (thenode.contains(tmpKey)) {// tmpKey == thenode单节点时如此
-//				System.out.println(tmpKey);
-			//if(true){
+//			if(true){
 				
 				NodeSN++;
 				if (tPhase < TimeThreshold) // 时间小于阈值
@@ -462,19 +460,11 @@ public class DetectTimeAll {
 						String ver = t.toString();
 						triangleNumber++;
 						String[] edgepoint = ver.split(",");
-						int node1 = Integer.valueOf(edgepoint[0]);
-						int node2 = Integer.valueOf(edgepoint[1]);
+						Integer node1 = Integer.valueOf(edgepoint[0]);
+						Integer node2 = Integer.valueOf(edgepoint[1]);
 						// 顶点度数统计，暂时可能用不上，记录，若成为耗时一环再删除，单只记录顶点
-						if (vertex.containsKey(node1)) {
-							vertex.put(node1, vertex.get(node1) + 1);
-						} else {
-							vertex.put(node1, 1);
-						}
-						if (vertex.containsKey(node2)) {
-							vertex.put(node2, vertex.get(node2) + 1);
-						} else {
-							vertex.put(node2, 1);
-						}
+						vertex.put(node2, null);
+						vertex.put(node1, null);
 						// 顶点相邻边的统计
 						HashSet<Integer> tmp = verEdge.get(node1);
 						if (tmp != null) {
@@ -497,38 +487,37 @@ public class DetectTimeAll {
 						}
 					}
 				
-					Iterator<Map.Entry<Integer, Integer>> iter = vertex
+					Iterator<Map.Entry<Integer, Node>> iter = vertex
 							.entrySet().iterator();
-					HashMap<Integer, Integer> tcand = new HashMap<Integer, Integer>();
+					HashMap<Integer, Node> tcand = new HashMap<Integer, Node>();
 					HashSet<Integer> tnot = new HashSet<Integer>();
 					while (iter.hasNext()) {
-						Map.Entry<Integer, Integer> et = iter.next();
+						Map.Entry<Integer, Node> et = iter.next();
 						if (et.getKey() < tmpKey) {
 							tnot.add(et.getKey());
 						} else {
 							tcand.put(et.getKey(), et.getValue());
-							HashSet<Integer> keyset = deg2cand.get(et
-									.getValue());
-							if (keyset == null) {
-								keyset = new HashSet<Integer>();
-								deg2cand.put(et.getValue(), keyset);
-								od2.put(et.getValue(), keyset);
-							}
-							keyset.add(et.getKey());
+//							HashSet<Integer> keyset = deg2cand.get(et
+//									.getValue());
+//							if (keyset == null) {
+//								keyset = new HashSet<Integer>();
+//								deg2cand.put(et.getValue(), keyset);
+//								od2.put(et.getValue(), keyset);
+//							}
+//							keyset.add(et.getKey());
 						}
 					}
 
 					if (tcand.size() < MaxOne)
 						return;
-
+					t1 = System.currentTimeMillis();
 					long t2 = System.currentTimeMillis();
-					Status top = new Status(tmpKey, 1, vertex, tnot, deg2cand,
-							od2);
+					Status top = new Status(tmpKey, 1, tcand, tnot, null,
+							null);
 
 					HashSet<Integer> notset = top.getNotset();
-					HashMap<Integer, Integer> cand = top.getCandidate();
-					HashMap<Integer, HashSet<Integer>> d2c;
-					TreeMap<Integer, HashSet<Integer>> od2c;
+					HashMap<Integer, Node> cand = top.getCandidate();
+					DegList deglist;
 					int level = top.getLevel();
 					int vp = top.getVp();
 					if (allContained(cand, notset)) {
@@ -539,14 +528,14 @@ public class DetectTimeAll {
 					} else {
 						result.set(level - 1, vp);
 					}
-					d2c = top.getDeg2cand();
-					od2c = top.getOd2c();
-					if (d2c == null) {
-						d2c = new HashMap<Integer, HashSet<Integer>>();
-						od2c = new TreeMap<Integer, HashSet<Integer>>();
-						updateDeg(cand, d2c, od2c);
-					}
-					if (judgeClique(d2c)) {
+//					d2c = top.getDeg2cand();
+//					od2c = top.getOd2c();
+//					if (d2c == null) {
+//						d2c = new HashMap<Integer, HashSet<Integer>>();
+//						od2c = new TreeMap<Integer, HashSet<Integer>>();
+						deglist = updateDeg(cand);
+//					}
+					if (judgeClique(deglist)) {
 						emitClique(result, level, cand, context);
 						return;
 					} else {
@@ -554,27 +543,27 @@ public class DetectTimeAll {
 						while (cand.size() + level > MaxOne + 1
 								&& cand.size() > 1) {
 							//System.out.println("cutt "+tmpKey);
-							Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
-									.firstEntry();
-							aim = firstEntry.getValue().iterator().next();//
-							mindeg = firstEntry.getKey();
-							HashMap<Integer, Integer> aimSet = updateMarkDeg(
-									aim, mindeg, cand, d2c, od2c);
+//							Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
+//									.firstEntry();
+							Node firstEntry = deglist.getHead();
+							aim = firstEntry.points.iterator().next();//
+							mindeg = firstEntry.deg;
+							HashMap<Integer, Node> aimSet = updateMarkDeg(
+									aim, mindeg, cand,deglist);
 							HashSet<Integer> aimnotset = genInterSet(notset,
 									aim);
 							Status ss = new Status(aim, level + 1, aimSet,
 									aimnotset, null, null);
+treesize++;
 							if (aimSet.size() <= sizeN && (tPhase <= TimeThreshold)) {
 								computeSmallGraph(ss, context, 1);
 							} else {
 								spillToDisk(ss, raf);
 							}
 							notset.add(aim);
-							if (judgeClique(d2c)) {
+							if (judgeClique(deglist)) {
 								if (cand.size() > 0) {
-									Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
-											.lastEntry();
-									aim = lastEntry.getValue().iterator()
+									aim = deglist.getTail().points.iterator()
 											.next();
 									notset.retainAll(verEdge.get(aim));
 								}
@@ -622,10 +611,10 @@ public class DetectTimeAll {
 						int node2 = Integer.valueOf(edgepoint[1]);
 						// 顶点度数统计，暂时可能用不上，记录，若成为耗时一环再删除，单只记录顶点
 						
-							vertex.put(node1, 1);
+							vertex.put(node1, null);
 						
 						
-							vertex.put(node2, 1);
+							vertex.put(node2, null);
 						
 						// 顶点相邻边的统计
 						HashSet<Integer> tmp = verEdge.get(node1);
@@ -649,12 +638,12 @@ public class DetectTimeAll {
 						}
 					}
 					//System.out.println("time is out! during generating");
-					Iterator<Map.Entry<Integer, Integer>> iter = vertex
+					Iterator<Map.Entry<Integer, Node>> iter = vertex
 							.entrySet().iterator();
-					HashMap<Integer, Integer> tcand = new HashMap<Integer, Integer>();
+					HashMap<Integer, Node> tcand = new HashMap<Integer, Node>();
 					HashSet<Integer> tnot = new HashSet<Integer>();
 					while (iter.hasNext()) {
-						Map.Entry<Integer, Integer> et = iter.next();
+						Map.Entry<Integer, Node> et = iter.next();
 						if (et.getKey() < tmpKey) {
 							tnot.add(et.getKey());
 						} else {
@@ -664,8 +653,8 @@ public class DetectTimeAll {
 
 					if (tcand.size() < MaxOne)
 						return;
-					Status top = new Status(tmpKey, 1, vertex, tnot, deg2cand,
-							od2);
+					Status top = new Status(tmpKey, 1, tcand, tnot, null,
+							null);
 					// 只要有数据写到磁盘且未完成计算就需要多一个MR步骤
 					// 整个状态发往下一个步骤，发往节点为p，边连接情况也只用发往p
 					int p = NodeSN % totalPart;
@@ -689,60 +678,58 @@ public class DetectTimeAll {
 			smallStack.add(sst);
 			switch (type) {
 			case 0:// 小的子图用bkpb的方法算
-				while (!smallStack.empty()) {
-					Status s = smallStack.pop();
-					HashSet<Integer> notset = s.getNotset();
-					HashMap<Integer, Integer> cand = s.getCandidate();
-					int vp = s.getVp(), level = s.getLevel();
-					if (level + cand.size() <= MaxOne) {
-						continue;
-					}
-					if (allContained(cand, notset)) {
-						continue;
-					}
-					if (result.size() + 1 == level) {
-						result.add(vp);
-					} else {
-						result.set(level - 1, vp);
-					}
-					if (cand.isEmpty()) {
-						if (notset.isEmpty()) {
-							emitClique(result, level, cand, context);
-						}
-						continue;
-					}
-					int fixp = findMaxDegreePoint(cand);
-					// int maxdeg = cand.get(fixp);
-					if (isClique) {
-						emitClique(result, level, cand, context);
-						continue;
-					}
-					ArrayList<Integer> noneFixp = new ArrayList<Integer>(
-							cand.size() - maxdeg);
-					HashMap<Integer, Integer> tmpcand = genInterSet(cand, fixp,
-							maxdeg, noneFixp);//
-					HashSet<Integer> tmpnot = genInterSet(notset, fixp);
-					Status tmp = new Status(fixp, level + 1, tmpcand, tmpnot,
-							null, null);
-					smallStack.add(tmp);
-					notset.add(fixp);
-					for (int fix : noneFixp) {
-						HashMap<Integer, Integer> tcand = genInterSet(cand, fix);
-						HashSet<Integer> tnot = genInterSet(notset, fix);
-						Status temp = new Status(fix, level + 1, tcand, tnot,
-								null, null);
-						smallStack.add(temp);
-						notset.add(fix);
-					}
-				}
+//				while (!smallStack.empty()) {
+//					Status s = smallStack.pop();
+//					HashSet<Integer> notset = s.getNotset();
+//					HashMap<Integer, Integer> cand = s.getCandidate();
+//					int vp = s.getVp(), level = s.getLevel();
+//					if (level + cand.size() <= MaxOne) {
+//						continue;
+//					}
+//					if (allContained(cand, notset)) {
+//						continue;
+//					}
+//					if (result.size() + 1 == level) {
+//						result.add(vp);
+//					} else {
+//						result.set(level - 1, vp);
+//					}
+//					if (cand.isEmpty()) {
+//						if (notset.isEmpty()) {
+//							emitClique(result, level, cand, context);
+//						}
+//						continue;
+//					}
+//					int fixp = findMaxDegreePoint(cand);
+//					// int maxdeg = cand.get(fixp);
+//					if (isClique) {
+//						emitClique(result, level, cand, context);
+//						continue;
+//					}
+//					ArrayList<Integer> noneFixp = new ArrayList<Integer>(
+//							cand.size() - maxdeg);
+//					HashMap<Integer, Integer> tmpcand = genInterSet(cand, fixp,
+//							maxdeg, noneFixp);//
+//					HashSet<Integer> tmpnot = genInterSet(notset, fixp);
+//					Status tmp = new Status(fixp, level + 1, tmpcand, tmpnot,
+//							null, null);
+//					smallStack.add(tmp);
+//					notset.add(fixp);
+//					for (int fix : noneFixp) {
+//						HashMap<Integer, Integer> tcand = genInterSet(cand, fix);
+//						HashSet<Integer> tnot = genInterSet(notset, fix);
+//						Status temp = new Status(fix, level + 1, tcand, tnot,
+//								null, null);
+//						smallStack.add(temp);
+//						notset.add(fix);
+//					}
+//				}
 				break;
 			case 1:// 小的子图用binary的方法算
 				while (!smallStack.empty()) {
 					Status top = smallStack.pop();
 					HashSet<Integer> notset = top.getNotset();
-					HashMap<Integer, Integer> cand = top.getCandidate();
-					HashMap<Integer, HashSet<Integer>> d2c;
-					TreeMap<Integer, HashSet<Integer>> od2c;
+					HashMap<Integer, Node> cand = top.getCandidate();
 					int level = top.getLevel();
 					int vp = top.getVp();
 					if (level + cand.size() <= MaxOne
@@ -754,37 +741,29 @@ public class DetectTimeAll {
 					} else {
 						result.set(level - 1, vp);
 					}
-					d2c = top.getDeg2cand();
-					od2c = top.getOd2c();
-					if (d2c == null) {
-						d2c = new HashMap<Integer, HashSet<Integer>>();
-						od2c = new TreeMap<Integer, HashSet<Integer>>();
-						updateDeg(cand, d2c, od2c);
-					}
-					if (judgeClique(d2c)) {
+					DegList deglist = updateDeg(cand);
+					if (judgeClique(deglist)) {
 						emitClique(result, level, cand, context);
 						continue;
 					} else {
 						int aim = 0, mindeg = Integer.MAX_VALUE;
 						while (cand.size() + level > MaxOne + 1
 								&& cand.size() > 1) {
-							Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
-									.firstEntry();
-							aim = firstEntry.getValue().iterator().next();//
-							mindeg = firstEntry.getKey();
-							HashMap<Integer, Integer> aimSet = updateMarkDeg(
-									aim, mindeg, cand, d2c, od2c);
+							Node firstEntry = deglist.getHead();
+							aim = firstEntry.points.iterator().next();//
+							mindeg = firstEntry.deg;
+							HashMap<Integer, Node> aimSet = updateMarkDeg(
+									aim, mindeg, cand, deglist);
 							HashSet<Integer> aimnotset = genInterSet(notset,
 									aim);
 							Status ss = new Status(aim, level + 1, aimSet,
 									aimnotset, null, null);
 							smallStack.add(ss);
+treesize++;
 							notset.add(aim);
-							if (judgeClique(d2c)) {
+							if (judgeClique(deglist)) {
 								if (cand.size() > 0) {
-									Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
-											.lastEntry();
-									aim = lastEntry.getValue().iterator()
+									aim = deglist.getTail().points.iterator()
 											.next();
 									notset.retainAll(verEdge.get(aim));
 								}
@@ -859,78 +838,85 @@ public class DetectTimeAll {
 			raf.write(sb.toString() );
 		}
 
-		private HashMap<Integer, Integer> updateMarkDeg(int aim, int mindeg,
-				HashMap<Integer, Integer> cand,
-				HashMap<Integer, HashSet<Integer>> d2c,
-				TreeMap<Integer, HashSet<Integer>> od2c) {
+		private HashMap<Integer, Node> updateMarkDeg(Integer aim, int mindeg,
+				HashMap<Integer, Node> cand,
+				DegList deglist) {
+			
+			HashSet<Node> toerase = new HashSet<Node>();
+			Node aimnode = cand.get(aim);
+			aimnode.points.remove(aim);
 			cand.remove(aim);
-			HashSet<Integer> li = d2c.get(mindeg);
-			li.remove(aim);
-			if (li.isEmpty()) {
-				d2c.remove(mindeg);
-				od2c.remove(mindeg);
+			if(aimnode.points.isEmpty()){
+				toerase.add(aimnode);
 			}
-			HashMap<Integer, Integer> result = new HashMap<Integer, Integer>();
+			int deg = -1;
+			HashMap<Integer, Node> result = new HashMap<Integer, Node>();
 			int acc = 0;
 			HashSet<Integer> adj = verEdge.get(aim);
 			if (adj.size() > cand.size()) {
-				Iterator<Map.Entry<Integer, Integer>> it = cand.entrySet()
+				Iterator<Map.Entry<Integer, Node>> it = cand.entrySet()
 						.iterator();
 				while (it.hasNext() && acc < mindeg) {
-					Map.Entry<Integer, Integer> en = it.next();
+					Map.Entry<Integer, Node> en = it.next();
 					if (adj.contains(en.getKey())) {
-						int point = en.getKey(), deg = en.getValue();
-						HashSet<Integer> lis = d2c.get(deg);
-						lis.remove(point);
-						if (lis.isEmpty()) {
-							d2c.remove(deg);
-							od2c.remove(deg);
+						aimnode = en.getValue();
+						aimnode.points.remove(en.getKey());
+						deg = aimnode.deg-1;
+						if(aimnode.prev==null||aimnode.prev.deg!=deg){
+							Node tpn = new Node();
+							HashSet<Integer> tps = new HashSet<Integer>();
+							tps.add(en.getKey());
+							tpn.points = tps;
+							tpn.deg = deg;
+							deglist.insertBefore(aimnode,tpn);
+							en.setValue(tpn);
+						}else{
+							aimnode.prev.points.add(en.getKey());
+							en.setValue(aimnode.prev);
 						}
-						deg--;
-						HashSet<Integer> list = d2c.get(deg);
-						if (list == null) {
-							list = new HashSet<Integer>();
-							d2c.put(deg, list);
-							od2c.put(deg, list);
-						}
-						list.add(point);
-						en.setValue(deg);
+						if(aimnode.points.isEmpty())
+							toerase.add(aimnode);
 						acc++;
-						result.put(point, 0);
+						result.put(en.getKey(), null);
 					}
 				}
 			} else {
 				Iterator<Integer> it = adj.iterator();
 				while (it.hasNext() && acc < mindeg) {
-					int point = it.next();
-					// Map.Entry<Integer, Integer> en = cand.
-					if (cand.containsKey(point)) {
-						int deg = cand.get(point);
-						HashSet<Integer> lis = d2c.get(deg);
-						lis.remove(point);
-						if (lis.isEmpty()) {
-							d2c.remove(deg);
-							od2c.remove(deg);
+					Integer point = it.next();
+					Node p = cand.get(point);
+					if (p!=null) {
+						p.points.remove(point);
+						deg = p.deg-1;
+						if(p.prev==null||p.prev.deg!=deg){
+							Node tpn = new Node();
+							HashSet<Integer>tps = new HashSet<Integer>();
+							tps.add(point);
+							tpn.points = tps;
+							tpn.deg = deg;
+							deglist.insertBefore(p, tpn);
+							cand.put(point, tpn);
+						}else{
+							p.prev.points.add(point);
+							cand.put(point, p.prev);
 						}
-						deg--;
-						HashSet<Integer> list = d2c.get(deg);
-						if (list == null) {
-							list = new HashSet<Integer>();
-							d2c.put(deg, list);
-							od2c.put(deg, list);
-						}
-						list.add(point);
-						cand.put(point, deg);
+						if(p.points.isEmpty())
+							toerase.add(p);
+						
 						acc++;
-						result.put(point, 0);
+						result.put(point, null);
 					}
 				}
+			}
+			for(Node n:toerase){
+				if(n.points.isEmpty())
+					deglist.remove(n);
 			}
 			return result;
 		}
 
 		private void emitClique(ArrayList<Integer> result2, int level,
-				HashMap<Integer, Integer> cand, Context context)
+				HashMap<Integer, Node> cand, Context context)
 				throws IOException, InterruptedException {
 		
 			StringBuilder sb = new StringBuilder();
@@ -959,15 +945,22 @@ public class DetectTimeAll {
 			}
 			return false;
 		}
-
-		private void updateDeg(HashMap<Integer, Integer> cand,
-				HashMap<Integer, HashSet<Integer>> d2c,
-				TreeMap<Integer, HashSet<Integer>> od2c) {
-			// TODO Auto-generated method stub
+		private boolean judgeClique(DegList deglist){
+			if(deglist.size==0)
+				return true;
+			if(deglist.size()>1)
+				return false;
+			if(deglist.getHead().deg+1==deglist.getHead().points.size())
+				return true;
+			return false;
+		}
+		private DegList updateDeg(HashMap<Integer, Node> cand) {
+			HashMap<Integer,Node> d2c = new HashMap<Integer,Node>();
+			ArrayList<Node> nodes  = new ArrayList<Node>();
 			int deg = 0;
 			HashSet<Integer> adj;
-			for (Map.Entry<Integer, Integer> en : cand.entrySet()) {
-				int cad = en.getKey();
+			for (Map.Entry<Integer, Node> en : cand.entrySet()) {
+				Integer cad = en.getKey();
 				adj = verEdge.get(cad);
 				deg = 0;
 				if (adj.size() > cand.size()) {
@@ -983,15 +976,23 @@ public class DetectTimeAll {
 						}
 					}
 				}
-				HashSet<Integer> d2cset = d2c.get(deg);
+				Node d2cset = d2c.get(deg);
 				if (d2cset == null) {
-					d2cset = new HashSet<Integer>();
+					HashSet<Integer>points = new HashSet<Integer>();
+					
+					d2cset = new Node();
+					d2cset.deg = deg;
+					d2cset.points = points;
+					nodes.add(d2cset);
 					d2c.put(deg, d2cset);
-					od2c.put(deg, d2cset);
 				}
-				d2cset.add(cad);
-				en.setValue(deg);
+				d2cset.points.add(cad);
+				en.setValue(d2cset);
 			}
+			Collections.sort(nodes);
+			DegList deglist = new DegList();
+			deglist.makeList(nodes);
+			return deglist;
 		}
 
 		private HashMap<Integer, Integer> genInterSet(
@@ -1068,7 +1069,7 @@ public class DetectTimeAll {
 			return result;
 		}
 
-		private boolean allContained(HashMap<Integer, Integer> cand,
+		private boolean allContained(HashMap<Integer, Node> cand,
 				HashSet<Integer> notset) {
 			for (int nt : notset) {
 				HashSet<Integer> nadj = verEdge.get(nt);
@@ -1078,80 +1079,80 @@ public class DetectTimeAll {
 			return false;
 		}
 
-		public void readInData(String filename) throws NumberFormatException,
-				IOException {
-			BufferedReader reader = new BufferedReader(new FileReader(filename));
-			String line = "";
-
-			while ((line = reader.readLine()) != null) {
-				String[] tp = line.split("\t");
-				tmpKey = Integer.parseInt(tp[0]);
-				String[] edgepoint = tp[1].split(",");
-				int node1 = Integer.valueOf(edgepoint[0]);
-				int node2 = Integer.valueOf(edgepoint[1]);
-				if (vertex.containsKey(node1)) {
-					vertex.put(node1, vertex.get(node1) + 1);
-				} else {
-					vertex.put(node1, 1);
-				}
-				if (vertex.containsKey(node2)) {
-					vertex.put(node2, vertex.get(node2) + 1);
-				} else {
-					vertex.put(node2, 1);
-				}
-				HashSet<Integer> tmp = verEdge.get(node1);
-				if (tmp != null) {
-					tmp.add(node2);
-				} else {
-					tmp = new HashSet<Integer>();
-					tmp.add(node2);
-					verEdge.put(node1, tmp);
-				}
-				tmp = verEdge.get(node2);
-				if (tmp != null) {
-					tmp.add(node1);
-				} else {
-					tmp = new HashSet<Integer>();
-					tmp.add(node1);
-					verEdge.put(node2, tmp);
-				}
-			}
-		}
-
-		public void readEdgeInfo(String filename) throws IOException {
-			BufferedReader reader = new BufferedReader(new FileReader(filename));
-			String line = "";
-			line = reader.readLine();
-			readVerEdge(line, verEdge, 1);
-			for (int k : verEdge.keySet()) {
-				vertex.put(k, 0);
-			}
-
-		}
-
-		public void test(String file) throws IOException, InterruptedException {
-			this.readEdgeInfo(file);
-			Iterator<Map.Entry<Integer, Integer>> iter = vertex.entrySet()
-					.iterator();
-			HashMap<Integer, Integer> tcand = new HashMap<Integer, Integer>();
-			HashSet<Integer> tnot = new HashSet<Integer>();
-			tmpKey = 133094;
-			while (iter.hasNext()) {
-				Map.Entry<Integer, Integer> et = iter.next();
-				if (et.getKey() < tmpKey) {
-					tnot.add(et.getKey());
-				} else {
-					tcand.put(et.getKey(), et.getValue());
-				}
-			}
-			if (tcand.size() < MaxOne)
-				return;
-			long t1 = System.currentTimeMillis();
-			long t2 = System.currentTimeMillis();
-			Status top = new Status(tmpKey, 1, vertex, tnot, null, null);
-			this.computeSmallGraph(top, null, 1);
-
-		}
+//		public void readInData(String filename) throws NumberFormatException,
+//				IOException {
+//			BufferedReader reader = new BufferedReader(new FileReader(filename));
+//			String line = "";
+//
+//			while ((line = reader.readLine()) != null) {
+//				String[] tp = line.split("\t");
+//				tmpKey = Integer.parseInt(tp[0]);
+//				String[] edgepoint = tp[1].split(",");
+//				int node1 = Integer.valueOf(edgepoint[0]);
+//				int node2 = Integer.valueOf(edgepoint[1]);
+//				if (vertex.containsKey(node1)) {
+//					vertex.put(node1, vertex.get(node1) + 1);
+//				} else {
+//					vertex.put(node1, 1);
+//				}
+//				if (vertex.containsKey(node2)) {
+//					vertex.put(node2, vertex.get(node2) + 1);
+//				} else {
+//					vertex.put(node2, 1);
+//				}
+//				HashSet<Integer> tmp = verEdge.get(node1);
+//				if (tmp != null) {
+//					tmp.add(node2);
+//				} else {
+//					tmp = new HashSet<Integer>();
+//					tmp.add(node2);
+//					verEdge.put(node1, tmp);
+//				}
+//				tmp = verEdge.get(node2);
+//				if (tmp != null) {
+//					tmp.add(node1);
+//				} else {
+//					tmp = new HashSet<Integer>();
+//					tmp.add(node1);
+//					verEdge.put(node2, tmp);
+//				}
+//			}
+//		}
+//
+//		public void readEdgeInfo(String filename) throws IOException {
+//			BufferedReader reader = new BufferedReader(new FileReader(filename));
+//			String line = "";
+//			line = reader.readLine();
+//			readVerEdge(line, verEdge, 1);
+//			for (int k : verEdge.keySet()) {
+//				vertex.put(k, 0);
+//			}
+//
+//		}
+//
+//		public void test(String file) throws IOException, InterruptedException {
+//			this.readEdgeInfo(file);
+//			Iterator<Map.Entry<Integer, Integer>> iter = vertex.entrySet()
+//					.iterator();
+//			HashMap<Integer, Integer> tcand = new HashMap<Integer, Integer>();
+//			HashSet<Integer> tnot = new HashSet<Integer>();
+//			tmpKey = 133094;
+//			while (iter.hasNext()) {
+//				Map.Entry<Integer, Integer> et = iter.next();
+//				if (et.getKey() < tmpKey) {
+//					tnot.add(et.getKey());
+//				} else {
+//					tcand.put(et.getKey(), et.getValue());
+//				}
+//			}
+//			if (tcand.size() < MaxOne)
+//				return;
+//			long t1 = System.currentTimeMillis();
+//			long t2 = System.currentTimeMillis();
+//			Status top = new Status(tmpKey, 1, vertex, tnot, null, null);
+//			this.computeSmallGraph(top, null, 1);
+//
+//		}
 
 	}// reducer
 
@@ -1159,6 +1160,6 @@ public class DetectTimeAll {
 			IOException, InterruptedException {
 		DetectReducer reducer = new DetectReducer();
 		reducer.setup(null);
-		reducer.test("/home/youli/CliqueHadoop/test");
+//		reducer.test("/home/youli/CliqueHadoop/test");
 	}
 }// class

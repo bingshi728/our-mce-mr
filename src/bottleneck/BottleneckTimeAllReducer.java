@@ -11,6 +11,7 @@ import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -20,6 +21,7 @@ import java.util.Stack;
 import java.util.TreeMap;
 
 import main.RunOver;
+import detect.*;
 
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -74,7 +76,7 @@ public class BottleneckTimeAllReducer {
 
 		private int maxdeg;
 		private boolean isClique;
-
+static int treesize = 0;
 		
 		long allStart = 0;
 		long allEnd = 0;
@@ -184,9 +186,10 @@ public class BottleneckTimeAllReducer {
 				result = null;
 				BufferedReader raf = new BufferedReader(new FileReader(curReduce));
 				// 重新写入这个文件，原来的文件作废，最后将其删除！
-				BufferedWriter rnew = new BufferedWriter(new FileWriter(new File(dirRoot,
-						"/outresult/binary/"+which + "#")));
+				BufferedWriter rnew = new BufferedWriter(new FileWriter(dirRoot+
+						"/outresult/binary/" + which + "#"));
 				String line = "";
+				
 				long t2 = System.currentTimeMillis();
 				while ((line = raf.readLine()) != null) {
 					// 是子图或者边邻接信息
@@ -212,22 +215,21 @@ public class BottleneckTimeAllReducer {
 							continue;// 还没有读全，继续往下读
 						}
 					}
-
 					// 一个完整的子图已经都读进来了，计算这个子图
+					//System.out.println("read in a hole sub graph");
+					
 					balanceOrNot = false;
 					parts.clear();
 					while (!stack.empty()) {
 						Status top = stack.pop();
 						HashSet<Integer> notset = top.getNotset();
-						HashMap<Integer, Integer> cand = top.getCandidate();
-						HashMap<Integer, HashSet<Integer>> d2c;
-						TreeMap<Integer, HashSet<Integer>> od2c;
+						HashMap<Integer, Node> cand = top.getCandidate();
 						int level = top.getLevel();
 						int vp = top.getVp();
-						if(top.getResult()!=null){
+						if (top.getResult() != null) {
 							result = top.getResult();
 						}
-						if(level+cand.size()<=MaxOne){
+						if (level + cand.size() <= MaxOne) {
 							continue;
 						}
 						if (allContained(cand, notset)) {
@@ -238,30 +240,25 @@ public class BottleneckTimeAllReducer {
 						} else {
 							result.set(level - 1, vp);
 						}
-						d2c = top.getDeg2cand();
-						od2c = top.getOd2c();
-						if (d2c == null) {
-							d2c = new HashMap<Integer, HashSet<Integer>>();
-							od2c = new TreeMap<Integer, HashSet<Integer>>();
-							updateDeg(cand, d2c, od2c);
-						}
-						if (judgeClique(d2c)) {
+						DegList deglist =
+							updateDeg(cand);
+						
+						if (judgeClique(deglist)) {
 							emitClique(result, level, cand, context);
 							continue;
 						} else {
-							int aim = 0, mindeg = Integer.MAX_VALUE;
-							while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
-								Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
-										.firstEntry();
-								aim = firstEntry.getValue().iterator().next();//
-								mindeg = firstEntry.getKey();
-								HashMap<Integer, Integer> aimSet = updateMarkDeg(
-										aim, mindeg, cand, d2c, od2c);
+							Integer aim = 0, mindeg = Integer.MAX_VALUE;
+							while (cand.size() + level > MaxOne + 1
+									&& cand.size() > 1) {
+								Node firstEntry = deglist.getHead();
+								aim = firstEntry.points.iterator().next();//
+								mindeg = firstEntry.deg;
+								HashMap<Integer, Node> aimSet = updateMarkDeg(
+										aim, mindeg, cand, deglist);
 								HashSet<Integer> aimnotset = genInterSet(
 										notset, aim);
 								Status ss = new Status(aim, level + 1, aimSet,
 										aimnotset, null, null);
-								
 								if(tPhase <= TimeThreshold){
 									if (aimSet.size() <= sizeN )
 										computeSmallGraph(ss, context, 1);
@@ -269,19 +266,23 @@ public class BottleneckTimeAllReducer {
 										stack.add(ss);
 									}
 								}else{
-									this.spillToDisk(ss, rnew);
+									spillToDisk(ss, rnew);
 								}
+treesize++;
+//								if (aimSet.size() <= sizeN &&  tPhase<=TimeThreshold)
+//									computeSmallGraph(ss, context, 1);
+//								else {
+//									spillToDisk(ss, rnew);
+//								}
 								
 								notset.add(aim);
-								if (judgeClique(d2c)) {
+								if (judgeClique(deglist)) {
 									if (cand.size() > 0) {
-										Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
-												.lastEntry();
-										aim = lastEntry.getValue().iterator()
+										aim = deglist.getTail().points.iterator()
 												.next();
 										notset.retainAll(verEdge.get(aim));
 									}
-									if(level+cand.size()<=MaxOne){
+									if (level + cand.size() <= MaxOne) {
 										break;
 									}
 									if (allContained(cand, notset)) {
@@ -297,27 +298,45 @@ public class BottleneckTimeAllReducer {
 									t1 = t2;
 								}
 							}
-						}
+//							if(cand.size() + level > MaxOne + 1
+//									&& cand.size() > 1){
+//								spillToDisk(top,rnew);
+//							}
+
+							if (tPhase <= TimeThreshold) {
+								t2 = System.currentTimeMillis();
+								tPhase += (t2 - t1);
+								t1 = t2;
+							}else{
+								break;
+							}
+						}//不是clique
 						if (tPhase > TimeThreshold) {
 							break;
 						}
-					}
+					}//stack不空
 					while (!stack.empty()) {
 						// 退出了栈还没空，说明时间到了还没计算完，把栈中的子图spill到磁盘
 						spillToDisk(stack.pop(), rnew);
 					}
 					if (balanceOrNot) {
-						rnew.write(((-2) + "\t" + 1 + "#" ));
+						rnew.write(((-2) + "\t" + 1 + "#") );
 						String pas = parts.toString();
-						rnew.write(pas.substring(1, pas.length()-1));
-						rnew.write(("#"+tmpKey+"#"));
+						rnew.write(pas.substring(1, pas.length() - 1)
+								 );
+						rnew.write(("#" + tmpKey + "#") );
 						writeVerEdge(verEdge, rnew);
-						rnew.write(("\n"));// rnew.write(("\n0\t0\n").getBytes());
+						rnew.write(("\n") );// rnew.write(("\n0\t0\n") );
 					}
 					if (tPhase > TimeThreshold) {
+						/**
+						System.out.println("in clean up OUTER time is out:"
+								+ (tPhase > TimeThreshold) + "\tt is " + tPhase
+								+ "\tpahse is " + TimeThreshold);*/
 						break;
 					}// 超时之后，后面文件也不读了
-				}// while stack isnot empty
+				}// while
+				System.out.println("append left file to end");
 				while ((line = raf.readLine()) != null) {
 					// 把原文件后面的内容直接考到新文件后面
 					rnew.write(line );
@@ -329,9 +348,9 @@ public class BottleneckTimeAllReducer {
 				System.out.println("this reducer is number:" + which + " "
 						+ "and clean up to end, so delete file:"
 						+ endf.getPath() + " --" + endRES);
+				rnew.close();
 				File tf = new File(dirRoot, "/outresult/binary/" + which
 						+ "#");
-				rnew.close();
 				if (tf.length() == 0) {
 					
 					boolean ntr = tf.delete();
@@ -354,6 +373,7 @@ public class BottleneckTimeAllReducer {
 			
 			allEnd = System.currentTimeMillis();
 			System.out.println("all time: "+(allEnd - allStart)/1000);
+System.out.println(treesize);
 		}
 
 		private void writeVerEdge(HashMap<Integer, HashSet<Integer>> edge,
@@ -465,10 +485,8 @@ public class BottleneckTimeAllReducer {
 				
 					Status top = stack.pop();
 					HashSet<Integer> notset = top.getNotset();
-					HashMap<Integer, Integer> cand = top.getCandidate();
+					HashMap<Integer, Node> cand = top.getCandidate();
 					result = top.getResult();
-					HashMap<Integer, HashSet<Integer>> d2c;
-					TreeMap<Integer, HashSet<Integer>> od2c;
 					int level = top.getLevel();
 					int vp = top.getVp();
 					if(level+cand.size()<=MaxOne){
@@ -484,14 +502,10 @@ public class BottleneckTimeAllReducer {
 					} else {
 						result.set(level - 1, vp);
 					}
-					d2c = top.getDeg2cand();
-					od2c = top.getOd2c();
-					if (d2c == null) {
-						d2c = new HashMap<Integer, HashSet<Integer>>();
-						od2c = new TreeMap<Integer, HashSet<Integer>>();
-						updateDeg(cand, d2c, od2c);
-					}
-					if (judgeClique(d2c)) {
+					DegList deglist =
+						updateDeg(cand);
+					
+					if (judgeClique(deglist)) {
 						emitClique(result, level, cand, context);
 						//this must be fucked here
 						//return;
@@ -499,12 +513,11 @@ public class BottleneckTimeAllReducer {
 					} else {
 						int aim = 0, mindeg = Integer.MAX_VALUE;
 						while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
-							Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
-									.firstEntry();
-							aim = firstEntry.getValue().iterator().next();//
-							mindeg = firstEntry.getKey();
-							HashMap<Integer, Integer> aimSet = updateMarkDeg(
-									aim, mindeg, cand, d2c, od2c);
+							Node firstEntry = deglist.getHead();
+							aim = firstEntry.points.iterator().next();//
+							mindeg = firstEntry.deg;
+							HashMap<Integer, Node> aimSet = updateMarkDeg(
+									aim, mindeg, cand,deglist);
 							HashSet<Integer> aimnotset = genInterSet(notset,
 									aim);
 							Status ss = new Status(aim, level + 1, aimSet,
@@ -514,12 +527,11 @@ public class BottleneckTimeAllReducer {
 							else {
 								spillToDisk(ss, raf);
 							}
+treesize++;
 							notset.add(aim);
-							if (judgeClique(d2c)) {
+							if (judgeClique(deglist)) {
 								if (cand.size() > 0) {
-									Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
-											.lastEntry();
-									aim = lastEntry.getValue().iterator()
+									aim = deglist.getTail().points.iterator()
 											.next();
 									notset.retainAll(verEdge.get(aim));
 								}
@@ -568,65 +580,64 @@ public class BottleneckTimeAllReducer {
 			// TODO Auto-generated method stub
 			Stack<Status> smallStack = new Stack<Status>();
 			smallStack.add(sst);
-			switch(type){
-			case 0://小的子图用bkpb的方法算
-				while (!smallStack.empty()) {
-					Status s = smallStack.pop();
-					HashSet<Integer> notset = s.getNotset();
-					HashMap<Integer, Integer> cand = s.getCandidate();
-					int vp = s.getVp(), level = s.getLevel();
-					if(level+cand.size()<=MaxOne){
-						continue;
-					}
-					if (allContained(cand, notset)) {
-						continue;
-					}
-					if (result.size() + 1 == level) {
-						result.add(vp);
-					} else {
-						result.set(level - 1, vp);
-					}
-					if (cand.isEmpty()) {
-						if (notset.isEmpty()) {
-							emitClique(result, level, cand, context);
-						}
-						continue;
-					}
-					int fixp = findMaxDegreePoint(cand);
-					// int maxdeg = cand.get(fixp);
-					if (isClique) {
-						emitClique(result, level, cand, context);
-						continue;
-					}
-					ArrayList<Integer> noneFixp = new ArrayList<Integer>(
-							cand.size() - maxdeg);
-					HashMap<Integer, Integer> tmpcand = genInterSet(cand, fixp,
-							maxdeg, noneFixp);//
-					HashSet<Integer> tmpnot = genInterSet(notset, fixp);
-					Status tmp = new Status(fixp, level + 1, tmpcand, tmpnot, null,
-							null);
-					smallStack.add(tmp);
-					notset.add(fixp);
-					for (int fix : noneFixp) {
-						HashMap<Integer, Integer> tcand = genInterSet(cand, fix);// �����Ѿ���fixp��cand����ɾ����
-						HashSet<Integer> tnot = genInterSet(notset, fix);
-						Status temp = new Status(fix, level + 1, tcand, tnot, null,
-								null);
-						smallStack.add(temp);
-						notset.add(fix);
-					}
-				}
+			switch (type) {
+			case 0:// 小的子图用bkpb的方法算
+//				while (!smallStack.empty()) {
+//					Status s = smallStack.pop();
+//					HashSet<Integer> notset = s.getNotset();
+//					HashMap<Integer, Integer> cand = s.getCandidate();
+//					int vp = s.getVp(), level = s.getLevel();
+//					if (level + cand.size() <= MaxOne) {
+//						continue;
+//					}
+//					if (allContained(cand, notset)) {
+//						continue;
+//					}
+//					if (result.size() + 1 == level) {
+//						result.add(vp);
+//					} else {
+//						result.set(level - 1, vp);
+//					}
+//					if (cand.isEmpty()) {
+//						if (notset.isEmpty()) {
+//							emitClique(result, level, cand, context);
+//						}
+//						continue;
+//					}
+//					int fixp = findMaxDegreePoint(cand);
+//					// int maxdeg = cand.get(fixp);
+//					if (isClique) {
+//						emitClique(result, level, cand, context);
+//						continue;
+//					}
+//					ArrayList<Integer> noneFixp = new ArrayList<Integer>(
+//							cand.size() - maxdeg);
+//					HashMap<Integer, Integer> tmpcand = genInterSet(cand, fixp,
+//							maxdeg, noneFixp);//
+//					HashSet<Integer> tmpnot = genInterSet(notset, fixp);
+//					Status tmp = new Status(fixp, level + 1, tmpcand, tmpnot,
+//							null, null);
+//					smallStack.add(tmp);
+//					notset.add(fixp);
+//					for (int fix : noneFixp) {
+//						HashMap<Integer, Integer> tcand = genInterSet(cand, fix);
+//						HashSet<Integer> tnot = genInterSet(notset, fix);
+//						Status temp = new Status(fix, level + 1, tcand, tnot,
+//								null, null);
+//						smallStack.add(temp);
+//						notset.add(fix);
+//					}
+//				}
 				break;
-			case 1://小的子图用binary的方法算
+			case 1:// 小的子图用binary的方法算
 				while (!smallStack.empty()) {
 					Status top = smallStack.pop();
 					HashSet<Integer> notset = top.getNotset();
-					HashMap<Integer, Integer> cand = top.getCandidate();
-					HashMap<Integer, HashSet<Integer>> d2c;
-					TreeMap<Integer, HashSet<Integer>> od2c;
+					HashMap<Integer, Node> cand = top.getCandidate();
 					int level = top.getLevel();
 					int vp = top.getVp();
-					if (level+cand.size()<=MaxOne||allContained(cand, notset)) {
+					if (level + cand.size() <= MaxOne
+							|| allContained(cand, notset)) {
 						continue;
 					}
 					if (result.size() + 1 == level) {
@@ -634,40 +645,33 @@ public class BottleneckTimeAllReducer {
 					} else {
 						result.set(level - 1, vp);
 					}
-					d2c = top.getDeg2cand();
-					od2c = top.getOd2c();
-					if (d2c == null) {
-						d2c = new HashMap<Integer, HashSet<Integer>>();
-						od2c = new TreeMap<Integer, HashSet<Integer>>();
-						updateDeg(cand, d2c, od2c);
-					}
-					if (judgeClique(d2c)) {
+					DegList deglist = updateDeg(cand);
+					if (judgeClique(deglist)) {
 						emitClique(result, level, cand, context);
 						continue;
 					} else {
 						int aim = 0, mindeg = Integer.MAX_VALUE;
-						while (cand.size() + level > MaxOne+1 && cand.size() > 0) {
-							Map.Entry<Integer, HashSet<Integer>> firstEntry = od2c
-									.firstEntry();
-							aim = firstEntry.getValue().iterator().next();//
-							mindeg = firstEntry.getKey();
-							HashMap<Integer, Integer> aimSet = updateMarkDeg(
-									aim, mindeg, cand, d2c, od2c);
+						while (cand.size() + level > MaxOne + 1
+								&& cand.size() > 1) {
+							Node firstEntry = deglist.getHead();
+							aim = firstEntry.points.iterator().next();//
+							mindeg = firstEntry.deg;
+							HashMap<Integer, Node> aimSet = updateMarkDeg(
+									aim, mindeg, cand, deglist);
 							HashSet<Integer> aimnotset = genInterSet(notset,
 									aim);
 							Status ss = new Status(aim, level + 1, aimSet,
 									aimnotset, null, null);
 							smallStack.add(ss);
+treesize++;
 							notset.add(aim);
-							if (judgeClique(d2c)) {
+							if (judgeClique(deglist)) {
 								if (cand.size() > 0) {
-									Map.Entry<Integer, HashSet<Integer>> lastEntry = od2c
-											.lastEntry();
-									aim = lastEntry.getValue().iterator()
+									aim = deglist.getTail().points.iterator()
 											.next();
 									notset.retainAll(verEdge.get(aim));
 								}
-								if(level+cand.size()<=MaxOne){
+								if (level + cand.size() <= MaxOne) {
 									break;
 								}
 								if (allContained(cand, notset)) {
@@ -682,7 +686,7 @@ public class BottleneckTimeAllReducer {
 				}
 				break;
 			}
-			
+
 		}
 
 		private int findMaxDegreePoint(HashMap<Integer, Integer> cand) {
@@ -738,78 +742,85 @@ public class BottleneckTimeAllReducer {
 			raf.write(sb.toString() );
 		}
 
-		private HashMap<Integer, Integer> updateMarkDeg(int aim, int mindeg,
-				HashMap<Integer, Integer> cand,
-				HashMap<Integer, HashSet<Integer>> d2c,
-				TreeMap<Integer, HashSet<Integer>> od2c) {
+		private HashMap<Integer, Node> updateMarkDeg(Integer aim, int mindeg,
+				HashMap<Integer, Node> cand,
+				DegList deglist) {
+			
+			HashSet<Node> toerase = new HashSet<Node>();
+			Node aimnode = cand.get(aim);
+			aimnode.points.remove(aim);
 			cand.remove(aim);
-			HashSet<Integer> li = d2c.get(mindeg);
-			li.remove(aim);
-			if (li.isEmpty()) {
-				d2c.remove(mindeg);
-				od2c.remove(mindeg);
+			if(aimnode.points.isEmpty()){
+				toerase.add(aimnode);
 			}
-			HashMap<Integer, Integer> result = new HashMap<Integer, Integer>();
+			int deg = -1;
+			HashMap<Integer, Node> result = new HashMap<Integer, Node>();
 			int acc = 0;
 			HashSet<Integer> adj = verEdge.get(aim);
 			if (adj.size() > cand.size()) {
-				Iterator<Map.Entry<Integer, Integer>> it = cand.entrySet()
+				Iterator<Map.Entry<Integer, Node>> it = cand.entrySet()
 						.iterator();
 				while (it.hasNext() && acc < mindeg) {
-					Map.Entry<Integer, Integer> en = it.next();
+					Map.Entry<Integer, Node> en = it.next();
 					if (adj.contains(en.getKey())) {
-						int point = en.getKey(), deg = en.getValue();
-						HashSet<Integer> lis = d2c.get(deg);
-						lis.remove(point);
-						if (lis.isEmpty()) {
-							d2c.remove(deg);
-							od2c.remove(deg);
+						aimnode = en.getValue();
+						aimnode.points.remove(en.getKey());
+						deg = aimnode.deg-1;
+						if(aimnode.prev==null||aimnode.prev.deg!=deg){
+							Node tpn = new Node();
+							HashSet<Integer> tps = new HashSet<Integer>();
+							tps.add(en.getKey());
+							tpn.points = tps;
+							tpn.deg = deg;
+							deglist.insertBefore(aimnode,tpn);
+							en.setValue(tpn);
+						}else{
+							aimnode.prev.points.add(en.getKey());
+							en.setValue(aimnode.prev);
 						}
-						deg--;
-						HashSet<Integer> list = d2c.get(deg);
-						if (list == null) {
-							list = new HashSet<Integer>();
-							d2c.put(deg, list);
-							od2c.put(deg, list);
-						}
-						list.add(point);
-						en.setValue(deg);
+						if(aimnode.points.isEmpty())
+							toerase.add(aimnode);
 						acc++;
-						result.put(point, 0);
+						result.put(en.getKey(), null);
 					}
 				}
 			} else {
 				Iterator<Integer> it = adj.iterator();
 				while (it.hasNext() && acc < mindeg) {
-					int point = it.next();
-					// Map.Entry<Integer, Integer> en = cand.
-					if (cand.containsKey(point)) {
-						int deg = cand.get(point);
-						HashSet<Integer> lis = d2c.get(deg);
-						lis.remove(point);
-						if (lis.isEmpty()) {
-							d2c.remove(deg);
-							od2c.remove(deg);
+					Integer point = it.next();
+					Node p = cand.get(point);
+					if (p!=null) {
+						p.points.remove(point);
+						deg = p.deg-1;
+						if(p.prev==null||p.prev.deg!=deg){
+							Node tpn = new Node();
+							HashSet<Integer>tps = new HashSet<Integer>();
+							tps.add(point);
+							tpn.points = tps;
+							tpn.deg = deg;
+							deglist.insertBefore(p, tpn);
+							cand.put(point, tpn);
+						}else{
+							p.prev.points.add(point);
+							cand.put(point, p.prev);
 						}
-						deg--;
-						HashSet<Integer> list = d2c.get(deg);
-						if (list == null) {
-							list = new HashSet<Integer>();
-							d2c.put(deg, list);
-							od2c.put(deg, list);
-						}
-						list.add(point);
-						cand.put(point, deg);
+						if(p.points.isEmpty())
+							toerase.add(p);
+						
 						acc++;
-						result.put(point, 0);
+						result.put(point, null);
 					}
 				}
+			}
+			for(Node n:toerase){
+				if(n.points.isEmpty())
+					deglist.remove(n);
 			}
 			return result;
 		}
 
 		private void emitClique(ArrayList<Integer> result2, int level,
-				HashMap<Integer, Integer> cand, Context context)
+				HashMap<Integer, Node> cand, Context context)
 				throws IOException, InterruptedException {
 			
 			StringBuilder sb = new StringBuilder();
@@ -839,15 +850,22 @@ public class BottleneckTimeAllReducer {
 			}
 			return false;
 		}
-
-		private void updateDeg(HashMap<Integer, Integer> cand,
-				HashMap<Integer, HashSet<Integer>> d2c,
-				TreeMap<Integer, HashSet<Integer>> od2c) {
-			// TODO Auto-generated method stub
+		private boolean judgeClique(DegList deglist){
+			if(deglist.size==0)
+				return true;
+			if(deglist.size()>1)
+				return false;
+			if(deglist.getHead().deg+1==deglist.getHead().points.size())
+				return true;
+			return false;
+		}
+		private DegList updateDeg(HashMap<Integer, Node> cand) {
+			HashMap<Integer,Node> d2c = new HashMap<Integer,Node>();
+			ArrayList<Node> nodes  = new ArrayList<Node>();
 			int deg = 0;
 			HashSet<Integer> adj;
-			for (Map.Entry<Integer, Integer> en : cand.entrySet()) {
-				int cad = en.getKey();
+			for (Map.Entry<Integer, Node> en : cand.entrySet()) {
+				Integer cad = en.getKey();
 				adj = verEdge.get(cad);
 				deg = 0;
 				if (adj.size() > cand.size()) {
@@ -863,15 +881,23 @@ public class BottleneckTimeAllReducer {
 						}
 					}
 				}
-				HashSet<Integer> d2cset = d2c.get(deg);
+				Node d2cset = d2c.get(deg);
 				if (d2cset == null) {
-					d2cset = new HashSet<Integer>();
+					HashSet<Integer>points = new HashSet<Integer>();
+					
+					d2cset = new Node();
+					d2cset.deg = deg;
+					d2cset.points = points;
+					nodes.add(d2cset);
 					d2c.put(deg, d2cset);
-					od2c.put(deg, d2cset);
 				}
-				d2cset.add(cad);
-				en.setValue(deg);
+				d2cset.points.add(cad);
+				en.setValue(d2cset);
 			}
+			Collections.sort(nodes);
+			DegList deglist = new DegList();
+			deglist.makeList(nodes);
+			return deglist;
 		}
 
 		private HashMap<Integer, Integer> genInterSet(
@@ -948,7 +974,7 @@ public class BottleneckTimeAllReducer {
 			return result;
 		}
 
-		private boolean allContained(HashMap<Integer, Integer> cand,
+		private boolean allContained(HashMap<Integer, Node> cand,
 				HashSet<Integer> notset) {
 			for (int nt : notset) {
 				HashSet<Integer> nadj = verEdge.get(nt);
